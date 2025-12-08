@@ -1,0 +1,20 @@
+name: ralph
+version: 0.1.0
+
+authors:
+  - Chris Watson <cawatson1993@gmail.com>
+
+crystal: '>= 1.18.2'
+
+license: MIT
+
+targets:
+  ralph:
+    main: src/bin/ralph.cr
+
+dependencies:
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+    version: ~> 0.22.0
+
+development_dependencies:
