@@ -7,7 +7,7 @@ This roadmap outlines the planned development path for Ralph to become a product
 **Current Version:** 0.1.0
 
 **What's Working:**
-- ✅ **ALL IMMEDIATE MVP FEATURES COMPLETE** - Phase 1 + Phase 2.1 Advanced Clauses + Phase 2.2 Aggregates + Phase 3.1 Basic Associations + Phase 4.1 Transactions + Phase 2.3 Join Improvements + Phase 7.1 CLI Enhancements
+- ✅ **ALL IMMEDIATE MVP FEATURES COMPLETE** - Phase 1 + Phase 2.1 Advanced Clauses + Phase 2.2 Aggregates + Phase 3.1 Basic Associations + Phase 3.2 Association Options + Phase 4.1 Transactions + Phase 2.3 Join Improvements + Phase 7.1 CLI Enhancements
 - ✅ Phase 1: Core Model Features (CRUD, Validations, Callbacks, Attributes)
 - ✅ Phase 2.1: Advanced Clauses (GROUP BY, HAVING, DISTINCT)
 - ✅ Phase 2.2: Aggregates (count, sum, avg, min, max)
@@ -20,7 +20,7 @@ This roadmap outlines the planned development path for Ralph to become a product
 - Migration system with schema DSL
 - CLI with database operations and generators
 - Model base class with macros
-- **Comprehensive test coverage (232 tests, all passing)**
+- **Comprehensive test coverage (369 tests, all passing)**
 
 ---
 
@@ -117,15 +117,15 @@ This roadmap outlines the planned development path for Ralph to become a product
 - [x] `has_many` - Collection of records
 - [ ] Polymorphic associations
 
-### 3.2 Association Options
-- [ ] `class_name` - Specify related model class
-- [ ] `foreign_key` - Custom foreign key
-- [ ] `primary_key` - Custom primary key
-- [ ] `dependent` - Cascade destroy behaviors
-  - `:destroy` - Run callbacks
-  - `:delete` - Skip callbacks
-  - `:nullify` - Set foreign key to NULL
-  - `:restrict_with_error` / `:restrict_with_exception`
+### 3.2 Association Options ✅
+- [x] `class_name` - Specify related model class
+- [x] `foreign_key` - Custom foreign key
+- [x] `primary_key` - Custom primary key
+- [x] `dependent` - Cascade destroy behaviors
+  - [x] `:destroy` - Run callbacks
+  - [x] `:delete` / `:delete_all` - Skip callbacks
+  - [x] `:nullify` - Set foreign key to NULL
+  - [x] `:restrict_with_error` / `:restrict_with_exception`
 
 ### 3.3 Association Features
 - [ ] Automatic foreign key management
@@ -335,7 +335,7 @@ This roadmap outlines the planned development path for Ralph to become a product
 **Short-term (Next priorities):**
 10. Phase 7.1 - CLI Enhancements ✅
 11. Phase 2.5 - Query Composition/Scopes
-12. Phase 3.2 - Association Options
+12. Phase 3.2 - Association Options ✅
 
 **Medium-term (3-6 months):**
 13. Phase 3.3 - Association Features
