@@ -99,6 +99,74 @@ module Ralph
         @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
       end
 
+      # Add a reference column (foreign key) to an existing table
+      #
+      # Options:
+      # - polymorphic: If true, creates both name_id and name_type columns
+      #
+      # Usage:
+      # ```crystal
+      # add_reference("comments", "user")                      # Adds user_id column
+      # add_reference("comments", "commentable", polymorphic: true)  # Adds commentable_id and commentable_type
+      # ```
+      def add_reference(table : String, name : String, polymorphic : Bool = false)
+        if polymorphic
+          # Add both ID and type columns
+          id_col = "#{name}_id"
+          type_col = "#{name}_type"
+
+          add_column(table, id_col, :bigint)
+          add_column(table, type_col, :string)
+          add_index(table, id_col, name: "index_#{table}_on_#{id_col}")
+        else
+          # Regular reference
+          col_name = "#{name}_id"
+          add_column(table, col_name, :bigint)
+          add_index(table, col_name)
+        end
+      end
+
+      # Alias for add_reference (Rails compatibility)
+      def add_references(table : String, name : String, polymorphic : Bool = false)
+        add_reference(table, name, polymorphic: polymorphic)
+      end
+
+      # Alias for add_reference (Rails compatibility)
+      def add_belongs_to(table : String, name : String, polymorphic : Bool = false)
+        add_reference(table, name, polymorphic: polymorphic)
+      end
+
+      # Remove a reference column from a table
+      #
+      # Options:
+      # - polymorphic: If true, removes both name_id and name_type columns
+      def remove_reference(table : String, name : String, polymorphic : Bool = false)
+        if polymorphic
+          # Remove both ID and type columns
+          id_col = "#{name}_id"
+          type_col = "#{name}_type"
+
+          remove_index(table, id_col, name: "index_#{table}_on_#{id_col}")
+          remove_column(table, type_col)
+          remove_column(table, id_col)
+        else
+          # Regular reference
+          col_name = "#{name}_id"
+          remove_index(table, col_name)
+          remove_column(table, col_name)
+        end
+      end
+
+      # Alias for remove_reference (Rails compatibility)
+      def remove_references(table : String, name : String, polymorphic : Bool = false)
+        remove_reference(table, name, polymorphic: polymorphic)
+      end
+
+      # Alias for remove_reference (Rails compatibility)
+      def remove_belongs_to(table : String, name : String, polymorphic : Bool = false)
+        remove_reference(table, name, polymorphic: polymorphic)
+      end
+
       # Execute raw SQL
       def execute(sql : String)
         @database.execute(sql)

@@ -76,12 +76,44 @@ module Ralph
         end
 
         # Add a reference column (foreign key)
-        def reference(name : String, foreign_key : String? = nil)
-          col_name = "#{name}_id"
-          column(col_name, :bigint)
-          foreign_key_column = foreign_key || "id"
-          # Index for foreign key
-          @indexes << IndexDefinition.new(@name, col_name, "index_#{@name}_on_#{col_name}", false)
+        #
+        # Options:
+        # - polymorphic: If true, creates both name_id and name_type columns
+        # - foreign_key: Custom foreign key column name
+        #
+        # Usage:
+        # ```crystal
+        # reference("user")                      # Creates user_id column
+        # reference("commentable", polymorphic: true)  # Creates commentable_id and commentable_type
+        # ```
+        def reference(name : String, polymorphic : Bool = false, foreign_key : String? = nil)
+          if polymorphic
+            # Create both ID and type columns for polymorphic associations
+            id_col_name = "#{name}_id"
+            type_col_name = "#{name}_type"
+
+            column(id_col_name, :bigint)
+            column(type_col_name, :string)
+
+            # Index on the ID column for better query performance
+            @indexes << IndexDefinition.new(@name, id_col_name, "index_#{@name}_on_#{id_col_name}", false)
+          else
+            # Regular reference: just the ID column
+            col_name = foreign_key || "#{name}_id"
+            column(col_name, :bigint)
+            # Index for foreign key
+            @indexes << IndexDefinition.new(@name, col_name, "index_#{@name}_on_#{col_name}", false)
+          end
+        end
+
+        # Alias for reference (Rails compatibility)
+        def references(name : String, polymorphic : Bool = false, foreign_key : String? = nil)
+          reference(name, polymorphic: polymorphic, foreign_key: foreign_key)
+        end
+
+        # Alias for reference (Rails compatibility)
+        def belongs_to(name : String, polymorphic : Bool = false, foreign_key : String? = nil)
+          reference(name, polymorphic: polymorphic, foreign_key: foreign_key)
         end
 
         # Add an index

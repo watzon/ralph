@@ -379,6 +379,50 @@ module Ralph
       results.close if results
     end
 
+    # Find all records matching multiple column conditions
+    #
+    # Used primarily for polymorphic associations where we need to match
+    # both type and id columns.
+    #
+    # Example:
+    # ```
+    # Comment.find_all_by_conditions({"commentable_type" => "Post", "commentable_id" => 1})
+    # ```
+    def self.find_all_by_conditions(conditions : Hash(String, DB::Any)) : Array(self)
+      query = Query::Builder.new(self.table_name)
+      conditions.each do |column, value|
+        query.where("\"#{column}\" = ?", value)
+      end
+
+      results = Ralph.database.query_all(query.build_select, args: query.where_args)
+      records = [] of self
+      results.each do
+        records << from_result_set(results)
+      end
+      records
+    ensure
+      results.close if results
+    end
+
+    # Find one record matching multiple column conditions
+    #
+    # Used primarily for polymorphic associations where we need to match
+    # both type and id columns.
+    def self.find_by_conditions(conditions : Hash(String, DB::Any)) : self?
+      query = Query::Builder.new(self.table_name)
+      conditions.each do |column, value|
+        query.where("\"#{column}\" = ?", value)
+      end
+      query.limit(1)
+
+      result = Ralph.database.query_one(query.build_select, args: query.where_args)
+      return nil unless result
+
+      record = from_result_set(result)
+      result.close
+      record
+    end
+
     # Count all records
     def self.count : Int64
       query = Query::Builder.new(self.table_name)

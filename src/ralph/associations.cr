@@ -29,6 +29,8 @@ module Ralph
     property class_name_override : Bool # True if class_name was explicitly set
     property foreign_key_override : Bool # True if foreign_key was explicitly set
     property primary_key_override : Bool # True if primary_key was explicitly set
+    property polymorphic : Bool          # True if this is a polymorphic belongs_to
+    property as_name : String?           # For has_many/has_one, the polymorphic interface name
 
     def initialize(
       @name : String,
@@ -41,7 +43,9 @@ module Ralph
       @dependent : DependentBehavior = DependentBehavior::None,
       @class_name_override : Bool = false,
       @foreign_key_override : Bool = false,
-      @primary_key_override : Bool = false
+      @primary_key_override : Bool = false,
+      @polymorphic : Bool = false,
+      @as_name : String? = nil
     )
     end
   end
@@ -52,6 +56,10 @@ module Ralph
   # - `belongs_to` - Many-to-one relationship (e.g., a post belongs to a user)
   # - `has_one` - One-to-one relationship (e.g., a user has one profile)
   # - `has_many` - One-to-many relationship (e.g., a user has many posts)
+  #
+  # Polymorphic associations are also supported:
+  # - `belongs_to :commentable, polymorphic: true` - Can belong to multiple model types
+  # - `has_many :comments, as: :commentable` - Parent side of polymorphic relationship
   #
   # Example:
   # ```
@@ -70,13 +78,51 @@ module Ralph
   #   has_one profile
   #   has_many posts
   # end
+  #
+  # # Polymorphic example:
+  # class Comment < Ralph::Model
+  #   column id, Int64, primary: true
+  #   column body, String
+  #
+  #   belongs_to :commentable, polymorphic: true
+  # end
+  #
+  # class Post < Ralph::Model
+  #   has_many :comments, as: :commentable
+  # end
+  #
+  # class Article < Ralph::Model
+  #   has_many :comments, as: :commentable
+  # end
   # ```
   module Associations
     # Store association metadata for each model class
     @@associations : Hash(String, Hash(String, AssociationMetadata)) = Hash(String, Hash(String, AssociationMetadata)).new
 
+    # Registry for polymorphic model lookup by class name string
+    # Required because Crystal doesn't have Object.const_get like Ruby
+    @@polymorphic_registry : Hash(String, Proc(Int64, Ralph::Model?)) = Hash(String, Proc(Int64, Ralph::Model?)).new
+
     def self.associations : Hash(String, Hash(String, AssociationMetadata))
       @@associations
+    end
+
+    # Get the polymorphic registry
+    def self.polymorphic_registry : Hash(String, Proc(Int64, Ralph::Model?))
+      @@polymorphic_registry
+    end
+
+    # Register a model class for polymorphic lookup
+    # This is called at runtime when models with `as:` option are loaded
+    def self.register_polymorphic_type(class_name : String, finder : Proc(Int64, Ralph::Model?))
+      @@polymorphic_registry[class_name] = finder
+    end
+
+    # Lookup and find a polymorphic record by class name and id
+    def self.find_polymorphic(class_name : String, id : Int64) : Ralph::Model?
+      finder = @@polymorphic_registry[class_name]?
+      return nil if finder.nil?
+      finder.call(id)
     end
 
     # Define a belongs_to association
@@ -85,6 +131,7 @@ module Ralph
     # - class_name: Specify the class of the association (e.g., "User" instead of inferring from name)
     # - foreign_key: Specify a custom foreign key column (e.g., "author_id" instead of "user_id")
     # - primary_key: Specify the primary key on the associated model (defaults to "id")
+    # - polymorphic: If true, this association can belong to multiple model types
     #
     # Usage:
     # ```crystal
@@ -92,10 +139,15 @@ module Ralph
     # belongs_to author, class_name: "User"
     # belongs_to author, class_name: "User", foreign_key: "writer_id"
     # belongs_to author, class_name: "User", primary_key: "uuid"
+    # belongs_to commentable, polymorphic: true  # Creates commentable_id and commentable_type columns
     # ```
     macro belongs_to(name, **options)
       {%
         name_str = name.id.stringify
+
+        # Handle polymorphic option
+        polymorphic_opt = options[:polymorphic]
+        is_polymorphic = polymorphic_opt == true
 
         # Handle class_name option
         class_name_opt = options[:class_name]
@@ -108,6 +160,10 @@ module Ralph
         foreign_key = foreign_key_opt ? foreign_key_opt.id : "#{name.id}_id".id
         foreign_key_str = foreign_key.id.stringify
 
+        # For polymorphic, we also need a type column
+        type_column = "#{name.id}_type".id
+        type_column_str = type_column.id.stringify
+
         # Handle primary_key option
         primary_key_opt = options[:primary_key]
         primary_key_override = primary_key_opt != nil
@@ -115,15 +171,15 @@ module Ralph
 
         type_str = @type.stringify
 
-        # Table name derived from class_name
-        table_name = class_name.underscore
+        # Table name derived from class_name (not used for polymorphic)
+        table_name = is_polymorphic ? "" : class_name.underscore
       %}
 
       # Register the association metadata
       {% if @type.has_constant?("_ralph_associations") %}
         @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
           {{name_str}},
-          {{class_name}},
+          {% if is_polymorphic %}"Ralph::Model"{% else %}{{class_name}}{% end %},
           {{foreign_key_str}},
           :belongs_to,
           {{table_name}},
@@ -132,13 +188,15 @@ module Ralph
           DependentBehavior::None,
           {{class_name_override}},
           {{foreign_key_override}},
-          {{primary_key_override}}
+          {{primary_key_override}},
+          {{is_polymorphic}},
+          nil
         )
       {% else %}
         @@_ralph_associations = Hash(String, AssociationMetadata).new
         @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
           {{name_str}},
-          {{class_name}},
+          {% if is_polymorphic %}"Ralph::Model"{% else %}{{class_name}}{% end %},
           {{foreign_key_str}},
           :belongs_to,
           {{table_name}},
@@ -147,62 +205,92 @@ module Ralph
           DependentBehavior::None,
           {{class_name_override}},
           {{foreign_key_override}},
-          {{primary_key_override}}
+          {{primary_key_override}},
+          {{is_polymorphic}},
+          nil
         )
         Ralph::Associations.associations[{{type_str}}] = @@_ralph_associations
       {% end %}
 
-      # Define the foreign key column if not already defined
-      column {{foreign_key}}, Int64
+      {% if is_polymorphic %}
+        # Polymorphic belongs_to: define both ID and type columns
+        column {{foreign_key}}, Int64?
+        column {{type_column}}, String?
 
-      # Getter for the associated record
-      def {{name}} : {{class_name.id}}?
-        # Get the foreign key value
-        foreign_key_value = @{{foreign_key}}
+        # Polymorphic getter - returns the associated record (any model type)
+        def {{name}} : Ralph::Model?
+          foreign_key_value = @{{foreign_key}}
+          type_value = @{{type_column}}
 
-        return nil if foreign_key_value.nil?
+          return nil if foreign_key_value.nil? || type_value.nil?
 
-        # Find the associated record using the configured primary key
-        {% if primary_key == "id" %}
-          {{class_name.id}}.find(foreign_key_value)
-        {% else %}
-          {{class_name.id}}.find_by({{primary_key}}, foreign_key_value)
-        {% end %}
-      end
+          # Use the polymorphic registry to find the record
+          Ralph::Associations.find_polymorphic(type_value.not_nil!, foreign_key_value.not_nil!)
+        end
 
-      # Setter for the associated record
-      def {{name}}=(record : {{class_name.id}}?)
-        if record
-          # Use the configured primary key from the associated record
+        # Polymorphic setter - accepts any Ralph::Model
+        def {{name}}=(record : Ralph::Model?)
+          if record
+            @{{type_column}} = record.class.to_s
+            @{{foreign_key}} = record.id
+          else
+            @{{type_column}} = nil
+            @{{foreign_key}} = nil
+          end
+        end
+      {% else %}
+        # Regular belongs_to: define the foreign key column
+        column {{foreign_key}}, Int64
+
+        # Getter for the associated record
+        def {{name}} : {{class_name.id}}?
+          # Get the foreign key value
+          foreign_key_value = @{{foreign_key}}
+
+          return nil if foreign_key_value.nil?
+
+          # Find the associated record using the configured primary key
+          {% if primary_key == "id" %}
+            {{class_name.id}}.find(foreign_key_value)
+          {% else %}
+            {{class_name.id}}.find_by({{primary_key}}, foreign_key_value)
+          {% end %}
+        end
+
+        # Setter for the associated record
+        def {{name}}=(record : {{class_name.id}}?)
+          if record
+            # Use the configured primary key from the associated record
+            {% if primary_key == "id" %}
+              @{{foreign_key}} = record.id
+            {% else %}
+              pk_value = record.__get_by_key_name({{primary_key}})
+              @{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
+            {% end %}
+          else
+            @{{foreign_key}} = nil
+          end
+        end
+
+        # Build a new associated record
+        def build_{{name}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          record
+        end
+
+        # Create a new associated record and save it
+        def create_{{name}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          record.save
           {% if primary_key == "id" %}
             @{{foreign_key}} = record.id
           {% else %}
             pk_value = record.__get_by_key_name({{primary_key}})
             @{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
           {% end %}
-        else
-          @{{foreign_key}} = nil
+          record
         end
-      end
-
-      # Build a new associated record
-      def build_{{name}}(**attrs) : {{class_name.id}}
-        record = {{class_name.id}}.new(**attrs)
-        record
-      end
-
-      # Create a new associated record and save it
-      def create_{{name}}(**attrs) : {{class_name.id}}
-        record = {{class_name.id}}.new(**attrs)
-        record.save
-        {% if primary_key == "id" %}
-          @{{foreign_key}} = record.id
-        {% else %}
-          pk_value = record.__get_by_key_name({{primary_key}})
-          @{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
-        {% end %}
-        record
-      end
+      {% end %}
     end
 
     # Define a has_one association
@@ -211,6 +299,7 @@ module Ralph
     # - class_name: Specify the class of the association (e.g., "Profile" instead of inferring from name)
     # - foreign_key: Specify a custom foreign key on the associated model (e.g., "owner_id" instead of "user_id")
     # - primary_key: Specify the primary key on this model (defaults to "id")
+    # - as: For polymorphic associations, specify the name of the polymorphic interface
     # - dependent: Specify what happens to associated records when this record is destroyed
     #   - :destroy - Destroy associated records (runs callbacks)
     #   - :delete - Delete associated records (skips callbacks)
@@ -224,6 +313,7 @@ module Ralph
     # has_one avatar, class_name: "UserAvatar"
     # has_one avatar, class_name: "UserAvatar", foreign_key: "owner_id"
     # has_one profile, dependent: :destroy
+    # has_one profile, as: :profileable  # Polymorphic association
     # ```
     macro has_one(name, **options)
       {%
@@ -237,10 +327,22 @@ module Ralph
         # Get just the class name without namespace for the default foreign key
         type_name = @type.name.stringify.split("::").last.underscore
 
+        # Handle 'as' option for polymorphic associations
+        as_opt = options[:as]
+        is_polymorphic = as_opt != nil
+        as_name = as_opt ? as_opt.id.stringify : nil
+
         # Handle foreign_key option
+        # For polymorphic, default to {as_name}_id
         foreign_key_opt = options[:foreign_key]
         foreign_key_override = foreign_key_opt != nil
-        foreign_key = foreign_key_opt ? foreign_key_opt.id : "#{type_name.id}_id".id
+        foreign_key = if foreign_key_opt
+                        foreign_key_opt.id
+                      elsif is_polymorphic && as_name
+                        "#{as_name.id}_id".id
+                      else
+                        "#{type_name.id}_id".id
+                      end
         foreign_key_str = foreign_key.id.stringify
 
         # Handle primary_key option
@@ -283,7 +385,9 @@ module Ralph
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
-          {{primary_key_override}}
+          {{primary_key_override}},
+          false,
+          {{as_name}}
         )
       {% else %}
         @@_ralph_associations = Hash(String, AssociationMetadata).new
@@ -310,28 +414,121 @@ module Ralph
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
-          {{primary_key_override}}
+          {{primary_key_override}},
+          false,
+          {{as_name}}
         )
         Ralph::Associations.associations[{{type_str}}] = @@_ralph_associations
       {% end %}
 
-      # Getter for the associated record
-      def {{name}} : {{class_name.id}}?
-        # Get the primary key value from this record
-        {% if primary_key == "id" %}
+      # Register this model as a polymorphic parent if as: is specified
+      {% if is_polymorphic %}
+        # Register at class load time using a class method
+        def self.__register_polymorphic_type_{{name}}
+          Ralph::Associations.register_polymorphic_type(
+            {{type_str}},
+            ->(id : Int64) { {{@type}}.find(id).as(Ralph::Model?) }
+          )
+        end
+
+        # Call registration immediately
+        __register_polymorphic_type_{{name}}
+      {% end %}
+
+      {% if is_polymorphic %}
+        # Polymorphic has_one: filter by type AND id
+        def {{name}} : {{class_name.id}}?
           pk_value = self.id
-        {% else %}
-          pk_value = self.__get_by_key_name({{primary_key}})
-        {% end %}
-        return nil if pk_value.nil?
+          return nil if pk_value.nil?
 
-        # Find the associated record by foreign key
-        {{class_name.id}}.find_by({{foreign_key_str}}, pk_value)
-      end
+          type_column = {{as_name}}.not_nil! + "_type"
+          id_column = {{as_name}}.not_nil! + "_id"
+          type_value = {{type_str}}
 
-      # Setter for the associated record
-      def {{name}}=(record : {{class_name.id}}?)
-        if record
+          # Use the find_by_conditions helper
+          conditions = {
+            type_column => type_value.as(DB::Any),
+            id_column => pk_value.as(DB::Any)
+          }
+          {{class_name.id}}.find_by_conditions(conditions)
+        end
+      {% else %}
+        # Regular has_one: Getter for the associated record
+        def {{name}} : {{class_name.id}}?
+          # Get the primary key value from this record
+          {% if primary_key == "id" %}
+            pk_value = self.id
+          {% else %}
+            pk_value = self.__get_by_key_name({{primary_key}})
+          {% end %}
+          return nil if pk_value.nil?
+
+          # Find the associated record by foreign key
+          {{class_name.id}}.find_by({{foreign_key_str}}, pk_value)
+        end
+      {% end %}
+
+      {% if is_polymorphic %}
+        {%
+          # Compute column names at compile time
+          poly_type_col = "#{as_name.id}_type".id
+          poly_id_col = "#{as_name.id}_id".id
+        %}
+
+        # Setter for the associated record (polymorphic)
+        def {{name}}=(record : {{class_name.id}}?)
+          if record
+            record.{{poly_type_col}} = {{type_str}}
+            record.{{poly_id_col}} = self.id
+            record.save
+          end
+        end
+
+        # Build a new associated record (polymorphic)
+        def build_{{name}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          record.{{poly_type_col}} = {{type_str}}
+          record.{{poly_id_col}} = self.id
+          record
+        end
+
+        # Create a new associated record and save it (polymorphic)
+        def create_{{name}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          record.{{poly_type_col}} = {{type_str}}
+          record.{{poly_id_col}} = self.id
+          record.save
+          record
+        end
+      {% else %}
+        # Setter for the associated record
+        def {{name}}=(record : {{class_name.id}}?)
+          if record
+            {% if primary_key == "id" %}
+              record.{{foreign_key}} = self.id
+            {% else %}
+              pk_value = self.__get_by_key_name({{primary_key}})
+              record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
+            {% end %}
+            record.save
+          end
+        end
+
+        # Build a new associated record
+        def build_{{name}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          {% if primary_key == "id" %}
+            record.{{foreign_key}} = self.id
+          {% else %}
+            pk_value = self.__get_by_key_name({{primary_key}})
+            record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
+          {% end %}
+          record
+        end
+
+        # Create a new associated record and save it
+        def create_{{name}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
           {% if primary_key == "id" %}
             record.{{foreign_key}} = self.id
           {% else %}
@@ -339,33 +536,9 @@ module Ralph
             record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
           {% end %}
           record.save
+          record
         end
-      end
-
-      # Build a new associated record
-      def build_{{name}}(**attrs) : {{class_name.id}}
-        record = {{class_name.id}}.new(**attrs)
-        {% if primary_key == "id" %}
-          record.{{foreign_key}} = self.id
-        {% else %}
-          pk_value = self.__get_by_key_name({{primary_key}})
-          record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
-        {% end %}
-        record
-      end
-
-      # Create a new associated record and save it
-      def create_{{name}}(**attrs) : {{class_name.id}}
-        record = {{class_name.id}}.new(**attrs)
-        {% if primary_key == "id" %}
-          record.{{foreign_key}} = self.id
-        {% else %}
-          pk_value = self.__get_by_key_name({{primary_key}})
-          record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
-        {% end %}
-        record.save
-        record
-      end
+      {% end %}
 
       # Handle dependent behavior for has_one
       {% if dependent_sym != "none" %}
@@ -383,9 +556,17 @@ module Ralph
             Ralph.database.execute(sql, args: args)
             true
           {% elsif dependent_sym == "nullify" %}
-            # Set foreign key to NULL
-            sql = "UPDATE \"#{{{class_name.id}}.table_name}\" SET \"#{{{foreign_key_str}}}\" = NULL WHERE \"#{{{class_name.id}}.primary_key}\" = ?"
-            Ralph.database.execute(sql, args: [associated.id])
+            {% if is_polymorphic %}
+              # Set both polymorphic columns to NULL
+              type_column = {{as_name}}.not_nil! + "_type"
+              id_column = {{as_name}}.not_nil! + "_id"
+              sql = "UPDATE \"#{{{class_name.id}}.table_name}\" SET \"#{id_column}\" = NULL, \"#{type_column}\" = NULL WHERE \"#{{{class_name.id}}.primary_key}\" = ?"
+              Ralph.database.execute(sql, args: [associated.id])
+            {% else %}
+              # Set foreign key to NULL
+              sql = "UPDATE \"#{{{class_name.id}}.table_name}\" SET \"#{{{foreign_key_str}}}\" = NULL WHERE \"#{{{class_name.id}}.primary_key}\" = ?"
+              Ralph.database.execute(sql, args: [associated.id])
+            {% end %}
             true
           {% elsif dependent_sym == "restrict_with_error" %}
               errors.add({{name_str}}, "cannot be deleted because dependent #{{{name_str}}} exists")
@@ -405,6 +586,7 @@ module Ralph
     # - class_name: Specify the class of the association (e.g., "Post" instead of inferring from name)
     # - foreign_key: Specify a custom foreign key on the associated model (e.g., "owner_id" instead of "user_id")
     # - primary_key: Specify the primary key on this model (defaults to "id")
+    # - as: For polymorphic associations, specify the name of the polymorphic interface
     # - dependent: Specify what happens to associated records when this record is destroyed
     #   - :destroy - Destroy associated records (runs callbacks)
     #   - :delete_all - Delete associated records (skips callbacks)
@@ -419,6 +601,7 @@ module Ralph
     # has_many articles, class_name: "BlogPost", foreign_key: "writer_id"
     # has_many posts, dependent: :destroy
     # has_many posts, dependent: :delete_all
+    # has_many comments, as: :commentable  # Polymorphic association
     # ```
     macro has_many(name, **options)
       {%
@@ -434,10 +617,22 @@ module Ralph
         # Get just the class name without namespace for the default foreign key
         type_name = @type.name.stringify.split("::").last.underscore
 
+        # Handle 'as' option for polymorphic associations
+        as_opt = options[:as]
+        is_polymorphic = as_opt != nil
+        as_name = as_opt ? as_opt.id.stringify : nil
+
         # Handle foreign_key option
+        # For polymorphic, default to {as_name}_id
         foreign_key_opt = options[:foreign_key]
         foreign_key_override = foreign_key_opt != nil
-        foreign_key = foreign_key_opt ? foreign_key_opt.id : "#{type_name.id}_id".id
+        foreign_key = if foreign_key_opt
+                        foreign_key_opt.id
+                      elsif is_polymorphic && as_name
+                        "#{as_name.id}_id".id
+                      else
+                        "#{type_name.id}_id".id
+                      end
         foreign_key_str = foreign_key.id.stringify
 
         # Handle primary_key option
@@ -481,7 +676,9 @@ module Ralph
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
-          {{primary_key_override}}
+          {{primary_key_override}},
+          false,
+          {{as_name}}
         )
       {% else %}
         @@_ralph_associations = Hash(String, AssociationMetadata).new
@@ -508,46 +705,103 @@ module Ralph
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
-          {{primary_key_override}}
+          {{primary_key_override}},
+          false,
+          {{as_name}}
         )
         Ralph::Associations.associations[{{type_str}}] = @@_ralph_associations
       {% end %}
 
-      # Getter for the associated records collection
-      def {{name}} : Array({{class_name.id}})
-        # Get the primary key value from this record
-        {% if primary_key == "id" %}
+      # Register this model as a polymorphic parent if as: is specified
+      {% if is_polymorphic %}
+        # Register at class load time using a class method
+        def self.__register_polymorphic_type
+          Ralph::Associations.register_polymorphic_type(
+            {{type_str}},
+            ->(id : Int64) { {{@type}}.find(id).as(Ralph::Model?) }
+          )
+        end
+
+        # Call registration immediately
+        __register_polymorphic_type
+      {% end %}
+
+      {% if is_polymorphic %}
+        # Polymorphic has_many: filter by type AND id
+        def {{name}} : Array({{class_name.id}})
           pk_value = self.id
-        {% else %}
-          pk_value = self.__get_by_key_name({{primary_key}})
-        {% end %}
-        return [] of {{class_name.id}} if pk_value.nil?
+          return [] of {{class_name.id}} if pk_value.nil?
 
-        # Find associated records by foreign key
-        {{class_name.id}}.find_all_by({{foreign_key_str}}, pk_value)
-      end
+          type_column = {{as_name}}.not_nil! + "_type"
+          id_column = {{as_name}}.not_nil! + "_id"
+          type_value = {{type_str}}
 
-      # Count the associated records
-      def {{name}}_count : Int32
-        # Get the primary key value from this record
-        {% if primary_key == "id" %}
+          # Use the find_all_by_conditions helper
+          conditions = {
+            type_column => type_value.as(DB::Any),
+            id_column => pk_value.as(DB::Any)
+          }
+          {{class_name.id}}.find_all_by_conditions(conditions)
+        end
+
+        # Count the associated records (polymorphic)
+        def {{name}}_count : Int32
           pk_value = self.id
-        {% else %}
-          pk_value = self.__get_by_key_name({{primary_key}})
-        {% end %}
-        return 0 if pk_value.nil?
+          return 0 if pk_value.nil?
 
-        table_name = {{class_name.id}}.table_name
-        fk = {{foreign_key_str}}
-        sql = "SELECT COUNT(*) FROM \"#{table_name}\" WHERE \"#{fk}\" = ?"
+          type_column = {{as_name}}.not_nil! + "_type"
+          id_column = {{as_name}}.not_nil! + "_id"
+          type_value = {{type_str}}
 
-        result = Ralph.database.query_one(sql, args: [pk_value])
-        return 0 unless result
+          table_name = {{class_name.id}}.table_name
+          sql = "SELECT COUNT(*) FROM \"#{table_name}\" WHERE \"#{type_column}\" = ? AND \"#{id_column}\" = ?"
 
-        count = result.read(Int32)
-        result.close
-        count
-      end
+          result = Ralph.database.scalar(sql, args: [type_value, pk_value])
+          return 0 unless result
+
+          case result
+          when Int32 then result
+          when Int64 then result.to_i32
+          else 0
+          end
+        end
+      {% else %}
+        # Regular has_many: Getter for the associated records collection
+        def {{name}} : Array({{class_name.id}})
+          # Get the primary key value from this record
+          {% if primary_key == "id" %}
+            pk_value = self.id
+          {% else %}
+            pk_value = self.__get_by_key_name({{primary_key}})
+          {% end %}
+          return [] of {{class_name.id}} if pk_value.nil?
+
+          # Find associated records by foreign key
+          {{class_name.id}}.find_all_by({{foreign_key_str}}, pk_value)
+        end
+
+        # Count the associated records
+        def {{name}}_count : Int32
+          # Get the primary key value from this record
+          {% if primary_key == "id" %}
+            pk_value = self.id
+          {% else %}
+            pk_value = self.__get_by_key_name({{primary_key}})
+          {% end %}
+          return 0 if pk_value.nil?
+
+          table_name = {{class_name.id}}.table_name
+          fk = {{foreign_key_str}}
+          sql = "SELECT COUNT(*) FROM \"#{table_name}\" WHERE \"#{fk}\" = ?"
+
+          result = Ralph.database.query_one(sql, args: [pk_value])
+          return 0 unless result
+
+          count = result.read(Int32)
+          result.close
+          count
+        end
+      {% end %}
 
       # Check if any associated records exist
       def {{name}}_any? : Bool
@@ -559,30 +813,57 @@ module Ralph
         {{name}}_count == 0
       end
 
-      # Build a new associated record
-      def build_{{singular_name.id}}(**attrs) : {{class_name.id}}
-        record = {{class_name.id}}.new(**attrs)
-        {% if primary_key == "id" %}
-          record.{{foreign_key}} = self.id
-        {% else %}
-          pk_value = self.__get_by_key_name({{primary_key}})
-          record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
-        {% end %}
-        record
-      end
+      {% if is_polymorphic %}
+        {%
+          # Compute column names at compile time
+          poly_type_col = "#{as_name.id}_type".id
+          poly_id_col = "#{as_name.id}_id".id
+        %}
 
-      # Create a new associated record and save it
-      def create_{{singular_name.id}}(**attrs) : {{class_name.id}}
-        record = {{class_name.id}}.new(**attrs)
-        {% if primary_key == "id" %}
-          record.{{foreign_key}} = self.id
-        {% else %}
-          pk_value = self.__get_by_key_name({{primary_key}})
-          record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
-        {% end %}
-        record.save
-        record
-      end
+        # Build a new associated record (polymorphic)
+        def build_{{singular_name.id}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          # Set the polymorphic columns using compile-time computed names
+          record.{{poly_type_col}} = {{type_str}}
+          record.{{poly_id_col}} = self.id
+          record
+        end
+
+        # Create a new associated record and save it (polymorphic)
+        def create_{{singular_name.id}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          # Set the polymorphic columns using compile-time computed names
+          record.{{poly_type_col}} = {{type_str}}
+          record.{{poly_id_col}} = self.id
+          record.save
+          record
+        end
+      {% else %}
+        # Build a new associated record
+        def build_{{singular_name.id}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          {% if primary_key == "id" %}
+            record.{{foreign_key}} = self.id
+          {% else %}
+            pk_value = self.__get_by_key_name({{primary_key}})
+            record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
+          {% end %}
+          record
+        end
+
+        # Create a new associated record and save it
+        def create_{{singular_name.id}}(**attrs) : {{class_name.id}}
+          record = {{class_name.id}}.new(**attrs)
+          {% if primary_key == "id" %}
+            record.{{foreign_key}} = self.id
+          {% else %}
+            pk_value = self.__get_by_key_name({{primary_key}})
+            record.{{foreign_key}} = pk_value.as(Int64) if pk_value.is_a?(Int64)
+          {% end %}
+          record.save
+          record
+        end
+      {% end %}
 
       # Handle dependent behavior for has_many
       {% if dependent_sym != "none" %}
@@ -605,27 +886,51 @@ module Ralph
             true
           {% elsif dependent_sym == "delete_all" || dependent_sym == "delete" %}
             # Direct SQL delete without callbacks
-            {% if primary_key == "id" %}
+            {% if is_polymorphic %}
               pk_value = self.id
-            {% else %}
-              pk_value = self.__get_by_key_name({{primary_key}})
-            {% end %}
-            return true if pk_value.nil?
+              return true if pk_value.nil?
 
-            sql = "DELETE FROM \"#{{{class_name.id}}.table_name}\" WHERE \"#{{{foreign_key_str}}}\" = ?"
-            Ralph.database.execute(sql, args: [pk_value])
+              type_column = {{as_name}}.not_nil! + "_type"
+              id_column = {{as_name}}.not_nil! + "_id"
+              type_value = {{type_str}}
+
+              sql = "DELETE FROM \"#{{{class_name.id}}.table_name}\" WHERE \"#{type_column}\" = ? AND \"#{id_column}\" = ?"
+              Ralph.database.execute(sql, args: [type_value, pk_value])
+            {% else %}
+              {% if primary_key == "id" %}
+                pk_value = self.id
+              {% else %}
+                pk_value = self.__get_by_key_name({{primary_key}})
+              {% end %}
+              return true if pk_value.nil?
+
+              sql = "DELETE FROM \"#{{{class_name.id}}.table_name}\" WHERE \"#{{{foreign_key_str}}}\" = ?"
+              Ralph.database.execute(sql, args: [pk_value])
+            {% end %}
             true
           {% elsif dependent_sym == "nullify" %}
             # Set foreign key to NULL
-            {% if primary_key == "id" %}
+            {% if is_polymorphic %}
               pk_value = self.id
-            {% else %}
-              pk_value = self.__get_by_key_name({{primary_key}})
-            {% end %}
-            return true if pk_value.nil?
+              return true if pk_value.nil?
 
-            sql = "UPDATE \"#{{{class_name.id}}.table_name}\" SET \"#{{{foreign_key_str}}}\" = NULL WHERE \"#{{{foreign_key_str}}}\" = ?"
-            Ralph.database.execute(sql, args: [pk_value])
+              type_column = {{as_name}}.not_nil! + "_type"
+              id_column = {{as_name}}.not_nil! + "_id"
+              type_value = {{type_str}}
+
+              sql = "UPDATE \"#{{{class_name.id}}.table_name}\" SET \"#{id_column}\" = NULL, \"#{type_column}\" = NULL WHERE \"#{type_column}\" = ? AND \"#{id_column}\" = ?"
+              Ralph.database.execute(sql, args: [type_value, pk_value])
+            {% else %}
+              {% if primary_key == "id" %}
+                pk_value = self.id
+              {% else %}
+                pk_value = self.__get_by_key_name({{primary_key}})
+              {% end %}
+              return true if pk_value.nil?
+
+              sql = "UPDATE \"#{{{class_name.id}}.table_name}\" SET \"#{{{foreign_key_str}}}\" = NULL WHERE \"#{{{foreign_key_str}}}\" = ?"
+              Ralph.database.execute(sql, args: [pk_value])
+            {% end %}
             true
           {% else %}
             true

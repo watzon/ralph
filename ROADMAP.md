@@ -7,11 +7,11 @@ This roadmap outlines the planned development path for Ralph to become a product
 **Current Version:** 0.1.0
 
 **What's Working:**
-- ✅ **ALL IMMEDIATE MVP FEATURES COMPLETE** - Phase 1 + Phase 2.1 Advanced Clauses + Phase 2.2 Aggregates + Phase 3.1 Basic Associations + Phase 3.2 Association Options + Phase 4.1 Transactions + Phase 2.3 Join Improvements + Phase 7.1 CLI Enhancements
+- ✅ **ALL IMMEDIATE MVP FEATURES COMPLETE** - Phase 1 + Phase 2.1 Advanced Clauses + Phase 2.2 Aggregates + Phase 3.1 Basic Associations (incl. Polymorphic) + Phase 3.2 Association Options + Phase 4.1 Transactions + Phase 2.3 Join Improvements + Phase 7.1 CLI Enhancements
 - ✅ Phase 1: Core Model Features (CRUD, Validations, Callbacks, Attributes)
 - ✅ Phase 2.1: Advanced Clauses (GROUP BY, HAVING, DISTINCT)
 - ✅ Phase 2.2: Aggregates (count, sum, avg, min, max)
-- ✅ Phase 3.1: Basic Associations (belongs_to, has_one, has_many)
+- ✅ Phase 3.1: Basic Associations (belongs_to, has_one, has_many, polymorphic)
 - ✅ Phase 4.1: Transactions (Model.transaction, nested transactions, callbacks)
 - ✅ Phase 2.3: Join Improvements (CROSS/FULL OUTER JOIN, join aliases, association joins)
 - ✅ Phase 7.1: CLI Enhancements (seed, reset, setup, model/scaffold generators)
@@ -20,7 +20,7 @@ This roadmap outlines the planned development path for Ralph to become a product
 - Migration system with schema DSL
 - CLI with database operations and generators
 - Model base class with macros
-- **Comprehensive test coverage (369 tests, all passing)**
+- **Comprehensive test coverage (398 tests, all passing)**
 
 ---
 
@@ -115,7 +115,7 @@ This roadmap outlines the planned development path for Ralph to become a product
 - [x] `belongs_to` - Single record association
 - [x] `has_one` - Single owned record
 - [x] `has_many` - Collection of records
-- [ ] Polymorphic associations
+- [x] Polymorphic associations
 
 ### 3.2 Association Options ✅
 - [x] `class_name` - Specify related model class
