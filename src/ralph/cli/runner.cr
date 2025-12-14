@@ -14,8 +14,9 @@ module Ralph
       @database_url : String?
       @migrations_dir : String = "./db/migrations"
       @environment : String = ENV["RALPH_ENV"]? || "development"
+      @output : IO
 
-      def initialize
+      def initialize(@output : IO = STDOUT)
       end
 
       # Run the CLI with the given arguments
@@ -37,19 +38,19 @@ module Ralph
         when "generate", "g"
           handle_generate_command(args[1..])
         else
-          puts "Unknown command: #{command}"
+          @output.puts "Unknown command: #{command}"
           print_help
           exit 1
         end
       end
 
       private def print_version
-        puts "Ralph v#{Ralph::VERSION}"
-        puts "Crystal ORM for delightful database interactions"
+        @output.puts "Ralph v#{Ralph::VERSION}"
+        @output.puts "Crystal ORM for delightful database interactions"
       end
 
       private def print_help
-        puts <<-HELP
+        @output.puts <<-HELP
         Ralph v#{Ralph::VERSION} - Crystal ORM
 
         Usage:
@@ -98,8 +99,8 @@ module Ralph
 
       private def handle_db_command(args : Array(String))
         if args.empty?
-          puts "Error: db command requires a subcommand"
-          puts "Available subcommands: create, drop, migrate, rollback, status, version, seed, reset, setup"
+          @output.puts "Error: db command requires a subcommand"
+          @output.puts "Available subcommands: create, drop, migrate, rollback, status, version, seed, reset, setup"
           exit 1
         end
 
@@ -131,15 +132,15 @@ module Ralph
         when "setup"
           setup_database(db)
         else
-          puts "Unknown db command: #{subcommand}"
+          @output.puts "Unknown db command: #{subcommand}"
           exit 1
         end
       end
 
       private def handle_generate_command(args : Array(String))
         if args.empty?
-          puts "Error: generate command requires a subcommand"
-          puts "Available subcommands: migration, model, scaffold"
+          @output.puts "Error: generate command requires a subcommand"
+          @output.puts "Available subcommands: migration, model, scaffold"
           exit 1
         end
 
@@ -148,27 +149,27 @@ module Ralph
         case subcommand
         when "migration", "m"
           if args.size < 2
-            puts "Error: migration name required"
-            puts "Usage: ralph g:migration NAME"
+            @output.puts "Error: migration name required"
+            @output.puts "Usage: ralph g:migration NAME"
             exit 1
           end
           create_migration(args[1])
         when "model"
           if args.size < 2
-            puts "Error: model name required"
-            puts "Usage: ralph g:model NAME [field:type ...]"
+            @output.puts "Error: model name required"
+            @output.puts "Usage: ralph g:model NAME [field:type ...]"
             exit 1
           end
           generate_model(args[1], args[2..]? || [] of String)
         when "scaffold"
           if args.size < 2
-            puts "Error: scaffold name required"
-            puts "Usage: ralph g:scaffold NAME [field:type ...]"
+            @output.puts "Error: scaffold name required"
+            @output.puts "Usage: ralph g:scaffold NAME [field:type ...]"
             exit 1
           end
           generate_scaffold(args[1], args[2..]? || [] of String)
         else
-          puts "Unknown generate command: #{subcommand}"
+          @output.puts "Unknown generate command: #{subcommand}"
           exit 1
         end
       end
@@ -179,10 +180,10 @@ module Ralph
           parser.on("-e ENV", "--env ENV", "Environment") { |e| @environment = e }
           parser.on("-d URL", "--database URL", "Database URL") { |d| @database_url = d }
           parser.on("-m DIR", "--migrations DIR", "Migrations directory") { |m| @migrations_dir = m }
-          parser.on("-h", "--help", "Show help") { puts parser; exit 0 }
+          parser.on("-h", "--help", "Show help") { @output.puts parser; exit 0 }
           parser.invalid_option do |flag|
-            puts "Error: Unknown option: #{flag}"
-            puts parser
+            @output.puts "Error: Unknown option: #{flag}"
+            @output.puts parser
             exit 1
           end
         end
@@ -221,9 +222,9 @@ module Ralph
         when /^sqlite3:\/\/(.+)$/
           path = $1
           FileUtils.mkdir_p(File.dirname(path))
-          puts "Created database: #{path}"
+          @output.puts "Created database: #{path}"
         else
-          puts "Database creation not implemented for: #{url}"
+          @output.puts "Database creation not implemented for: #{url}"
           exit 1
         end
       end
@@ -236,12 +237,12 @@ module Ralph
           path = $1
           if File.exists?(path)
             File.delete(path)
-            puts "Dropped database: #{path}"
+            @output.puts "Dropped database: #{path}"
           else
-            puts "Database does not exist: #{path}"
+            @output.puts "Database does not exist: #{path}"
           end
         else
-          puts "Database dropping not implemented for: #{url}"
+          @output.puts "Database dropping not implemented for: #{url}"
           exit 1
         end
       end
@@ -249,35 +250,35 @@ module Ralph
       private def migrate(db)
         migrator = Migrations::Migrator.new(db, @migrations_dir)
         migrator.migrate(:up)
-        puts "Migration complete"
+        @output.puts "Migration complete"
       end
 
       private def rollback(db)
         migrator = Migrations::Migrator.new(db, @migrations_dir)
         migrator.rollback
-        puts "Rollback complete"
+        @output.puts "Rollback complete"
       end
 
       private def status(db)
         migrator = Migrations::Migrator.new(db, @migrations_dir)
         status = migrator.status
 
-        puts "Migration status:"
-        puts "Status".ljust(12) + "Migration ID"
-        puts "-" * 50
+        @output.puts "Migration status:"
+        @output.puts "Status".ljust(12) + "Migration ID"
+        @output.puts "-" * 50
 
         status.each do |version, applied|
           status_str = applied ? "[   UP    ]" : "[  DOWN   ]"
-          puts "#{status_str} #{version}"
+          @output.puts "#{status_str} #{version}"
         end
       end
 
       private def version(db)
         migrator = Migrations::Migrator.new(db, @migrations_dir)
         if v = migrator.current_version
-          puts "Current version: #{v}"
+          @output.puts "Current version: #{v}"
         else
-          puts "No migrations have been run"
+          @output.puts "No migrations have been run"
         end
       end
 
@@ -290,16 +291,16 @@ module Ralph
         seed_file = "./db/seeds.cr"
 
         unless File.exists?(seed_file)
-          puts "No seed file found at #{seed_file}"
-          puts "Create one first with:"
-          puts "  # db/seeds.cr"
-          puts "  Ralph::Database::Seeder.run do"
-          puts "    # Your seed code here"
-          puts "  end"
+          @output.puts "No seed file found at #{seed_file}"
+          @output.puts "Create one first with:"
+          @output.puts "  # db/seeds.cr"
+          @output.puts "  Ralph::Database::Seeder.run do"
+          @output.puts "    # Your seed code here"
+          @output.puts "  end"
           exit 1
         end
 
-        puts "Loading seed file..."
+        @output.puts "Loading seed file..."
 
         # Load and execute the seed file using the block form
         success = Process.run("crystal", ["run", seed_file]) do |process|
@@ -308,16 +309,16 @@ module Ralph
         end
 
         if success
-          puts "Seeded database successfully"
+          @output.puts "Seeded database successfully"
         else
-          puts "Error running seed file"
+          @output.puts "Error running seed file"
           exit 1
         end
       end
 
       # Reset the database (drop, create, migrate, seed)
       private def reset_database(db)
-        puts "Resetting database..."
+        @output.puts "Resetting database..."
 
         # Drop existing database
         url = @database_url || database_url_for_env
@@ -326,7 +327,7 @@ module Ralph
           path = $1
           if File.exists?(path)
             File.delete(path)
-            puts "Dropped database: #{path}"
+            @output.puts "Dropped database: #{path}"
           end
         end
 
@@ -337,27 +338,27 @@ module Ralph
         db = initialize_database
 
         # Run migrations
-        puts "Running migrations..."
+        @output.puts "Running migrations..."
         migrate(db)
 
         # Run seeds
         seed(db)
 
-        puts "Database reset complete"
+        @output.puts "Database reset complete"
       end
 
       # Setup the database (create and migrate)
       private def setup_database(db)
-        puts "Setting up database..."
+        @output.puts "Setting up database..."
 
         # Create database
         create_database
 
         # Run migrations
-        puts "Running migrations..."
+        @output.puts "Running migrations..."
         migrate(db)
 
-        puts "Database setup complete"
+        @output.puts "Database setup complete"
       end
 
       # Generate a model with migration

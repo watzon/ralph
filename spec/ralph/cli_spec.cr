@@ -9,23 +9,22 @@ module Ralph
     describe "Commands" do
       describe "help" do
         it "displays help information" do
-          runner = Cli::Runner.new
-
-          # Capture output
           output = IO::Memory.new
+          runner = Cli::Runner.new(output)
           runner.run(["help"])
 
-          # Help should be displayed (this is a basic smoke test)
-          # A full test would capture stdout, but we're just ensuring it doesn't crash
+          output.to_s.should contain("Ralph v#{Ralph::VERSION}")
+          output.to_s.should contain("Usage:")
         end
       end
 
       describe "version" do
         it "displays version information" do
-          runner = Cli::Runner.new
+          output = IO::Memory.new
+          runner = Cli::Runner.new(output)
           runner.run(["version"])
 
-          # Version should be displayed without errors
+          output.to_s.should contain("Ralph v#{Ralph::VERSION}")
         end
       end
     end
