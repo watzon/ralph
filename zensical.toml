@@ -1,0 +1,91 @@
+# Zensical documentation configuration for Ralph
+# https://zensical.org
+
+[project]
+site_name = "Ralph"
+site_description = "Active Record-style ORM for Crystal with type safety and developer experience"
+site_author = "watzon"
+site_url = "https://watzon.github.io/ralph/"
+repo_url = "https://github.com/watzon/ralph"
+edit_uri = "edit/main/docs/"
+copyright = "Copyright &copy; 2025 watzon"
+
+extra_css = ["stylesheets/extra.css"]
+
+nav = [
+    {"Home" = "index.md"},
+    {"Guides" = [
+        {"Getting Started" = "guides/getting-started.md"},
+        {"Configuration" = "guides/configuration.md"}
+    ]},
+    {"Models" = [
+        {"Introduction" = "models/introduction.md"},
+        {"CRUD Operations" = "models/crud-operations.md"},
+        {"Associations" = "models/associations.md"},
+        {"Validations" = "models/validations.md"},
+        {"Callbacks" = "models/callbacks.md"},
+        {"Scopes" = "models/scopes.md"}
+    ]},
+    {"Query Builder" = [
+        {"Introduction" = "query-builder/introduction.md"},
+        {"Advanced" = "query-builder/advanced.md"}
+    ]},
+    {"Migrations" = [
+        {"Introduction" = "migrations/introduction.md"},
+        {"Schema Builder" = "migrations/schema-builder.md"}
+    ]},
+    {"CLI" = [
+        {"Commands" = "cli/commands.md"}
+    ]},
+    {"API Reference" = "api/index.md"}
+]
+
+[project.theme]
+language = "en"
+
+features = [
+    "content.code.annotate",
+    "content.code.copy",
+    "content.code.select",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.tracking",
+    "navigation.sections",
+    "navigation.path",
+    "navigation.top",
+    "navigation.footer",
+    "search.highlight",
+    "toc.follow",
+]
+
+# Color scheme - dark mode first (default)
+[[project.theme.palette]]
+scheme = "slate"
+primary = "deep purple"
+accent = "amber"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "deep purple"
+accent = "amber"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+# Social links
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/watzon/ralph"
+
+# Markdown extensions for syntax highlighting
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.snippets]
