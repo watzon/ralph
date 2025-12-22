@@ -2,12 +2,17 @@
 
 An Active Record-style ORM for Crystal with a focus on developer experience, type safety, and explicit over implicit behavior.
 
+**[📖 Full Documentation](https://watzon.github.io/ralph/)** | [Getting Started](https://watzon.github.io/ralph/guides/getting-started/) | [API Reference](https://watzon.github.io/ralph/api/)
+
 ## Features
 
 - **Active Record Pattern** - Simple, intuitive API for database operations
-- **Type-Safe Query Builder** - Fluent interface for building queries
+- **Type-Safe Query Builder** - Immutable, fluent interface with advanced SQL support
+- **Associations** - belongs_to, has_one, has_many with polymorphic support
+- **Validations** - Built-in validation macros for data integrity
+- **Callbacks** - Lifecycle hooks for model events
 - **Migration System** - Version-controlled schema changes with rollback support
-- **CLI Tool** - Command-line interface for database operations
+- **CLI Tool** - Command-line interface for database operations and code generation
 - **Pluggable Backends** - Currently SQLite with more planned
 - **Explicit Over Implicit** - No lazy loading by default, predictable behavior
 
@@ -143,28 +148,45 @@ end
 Ralph::Migrations::Migrator.register(CreateUsersTable_20240101120000)
 ```
 
+## Documentation
+
+For comprehensive documentation, visit **[https://watzon.github.io/ralph/](https://watzon.github.io/ralph/)**
+
+### Guides
+- [Getting Started](https://watzon.github.io/ralph/guides/getting-started/) - Installation and quick start
+- [Configuration](https://watzon.github.io/ralph/guides/configuration/) - Database setup and settings
+
+### Models
+- [Introduction](https://watzon.github.io/ralph/models/introduction/) - Model basics and column definitions
+- [CRUD Operations](https://watzon.github.io/ralph/models/crud-operations/) - Create, read, update, delete
+- [Associations](https://watzon.github.io/ralph/models/associations/) - Relationships between models
+- [Validations](https://watzon.github.io/ralph/models/validations/) - Data validation
+- [Callbacks](https://watzon.github.io/ralph/models/callbacks/) - Lifecycle hooks
+- [Scopes](https://watzon.github.io/ralph/models/scopes/) - Reusable queries
+
+### Query Builder
+- [Introduction](https://watzon.github.io/ralph/query-builder/introduction/) - Basic querying
+- [Advanced](https://watzon.github.io/ralph/query-builder/advanced/) - CTEs, window functions, set operations
+
+### Migrations
+- [Introduction](https://watzon.github.io/ralph/migrations/introduction/) - Migration basics
+- [Schema Builder](https://watzon.github.io/ralph/migrations/schema-builder/) - Table and column definitions
+
+### CLI
+- [Commands](https://watzon.github.io/ralph/cli/commands/) - All CLI commands and usage
+
+### API Reference
+- [API Documentation](https://watzon.github.io/ralph/api/) - Complete API reference
+
 ## CLI Commands
 
 ```bash
-ralph db:create                    # Create the database
-ralph db:drop                      # Drop the database
 ralph db:migrate                   # Run pending migrations
 ralph db:rollback                  # Roll back the last migration
 ralph db:status                    # Show migration status
-ralph db:version                   # Show current migration version
-ralph g:migration NAME              # Create a new migration
-ralph --help                       # Show help
+ralph g:migration NAME             # Create a new migration
+ralph --help                       # Show all commands
 ```
-
-## Architecture
-
-Ralph is organized into several key components:
-
-- **`Ralph::Model`** - Base class for ORM models with CRUD operations
-- **`Ralph::Query::Builder`** - Type-safe query builder
-- **`Ralph::Database::Backend`** - Abstract database interface
-- **`Ralph::Database::SqliteBackend`** - SQLite implementation
-- **`Ralph::Migrations`** - Migration system and schema definitions
 
 ## Development
 
@@ -178,6 +200,12 @@ Build the CLI:
 
 ```bash
 crystal build src/bin/ralph.cr -o bin/ralph
+```
+
+Generate API documentation:
+
+```bash
+crystal run scripts/generate_api_docs.cr
 ```
 
 ## Contributing
