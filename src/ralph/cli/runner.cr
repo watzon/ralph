@@ -1,5 +1,6 @@
 require "option_parser"
 require "file_utils"
+require "db"
 
 module Ralph
   module Cli
@@ -88,10 +89,21 @@ module Ralph
 
         Options:
           -e, --env ENV          Environment (default: development)
-          -d, --database URL     Database URL
+          -d, --database URL     Database URL (sqlite3:// or postgres://)
           -m, --migrations DIR   Migrations directory (default: ./db/migrations)
           --models DIR           Models directory (default: ./src/models)
           -h, --help             Show help
+
+        Environment variables:
+          DATABASE_URL           Primary database URL (any supported backend)
+          POSTGRES_URL           PostgreSQL connection URL
+          SQLITE_URL             SQLite connection URL
+          RALPH_ENV              Environment name (default: development)
+
+        Supported database URLs:
+          sqlite3://./path/to/db.sqlite3
+          postgres://user:pass@host:port/dbname
+          postgres://user@host/dbname?host=/var/run/postgresql
 
         Examples:
           ralph db:migrate
@@ -101,6 +113,10 @@ module Ralph
           ralph g:model User name:string email:string
           ralph g:model User name:string -m ./custom/migrations --models ./src/app/models
           ralph g:scaffold Post title:string body:text
+
+          # Using PostgreSQL
+          DATABASE_URL=postgres://localhost/myapp ralph db:migrate
+          ralph db:migrate -d postgres://localhost/myapp
         HELP
       end
 
@@ -116,14 +132,20 @@ module Ralph
         # Parse options
         parse_options(args[1..])
 
-        # Initialize database
-        db = initialize_database
-
+        # Commands that don't need an existing database connection
         case subcommand
         when "create"
           create_database
+          return
         when "drop"
           drop_database
+          return
+        end
+
+        # All other commands need a database connection
+        db = initialize_database
+
+        case subcommand
         when "migrate"
           migrate(db)
         when "rollback"
@@ -137,7 +159,7 @@ module Ralph
         when "reset"
           reset_database(db)
         when "setup"
-          setup_database(db)
+          setup_database
         else
           @output.puts "Unknown db command: #{subcommand}"
           exit 1
@@ -231,22 +253,34 @@ module Ralph
         url = @database_url || database_url_for_env
 
         case url
-        when .starts_with?("sqlite3://")
+        when .starts_with?("sqlite3://"), .starts_with?("sqlite://")
           Database::SqliteBackend.new(url)
+        when .starts_with?("postgres://"), .starts_with?("postgresql://")
+          Database::PostgresBackend.new(url)
         else
-          raise "Unsupported database URL: #{url}"
+          raise "Unsupported database URL: #{url}. Supported: sqlite3://, postgres://"
         end
       end
 
       private def database_url_for_env : String
+        # Check environment variables first (in order of precedence)
+        if url = ENV["DATABASE_URL"]?
+          return url
+        end
+
+        if url = ENV["POSTGRES_URL"]?
+          return url
+        end
+
+        if url = ENV["SQLITE_URL"]?
+          return url
+        end
+
         # Try to load from config file
         config_file = "./config/database.yml"
-
         if File.exists?(config_file)
-          # Parse YAML config
-          # This is a simplified version
-          env_url = ENV["DATABASE_URL"]?
-          return env_url if env_url
+          # TODO: Parse YAML config for environment-specific URLs
+          # For now, just use environment variables
         end
 
         # Default to SQLite
@@ -257,10 +291,31 @@ module Ralph
         url = @database_url || database_url_for_env
 
         case url
-        when /^sqlite3:\/\/(.+)$/
+        when /^sqlite3?:\/\/(.+)$/
           path = $1
           FileUtils.mkdir_p(File.dirname(path))
           @output.puts "Created database: #{path}"
+        when /^postgres(?:ql)?:\/\//
+          # Extract database name from URL
+          db_name = extract_postgres_db_name(url)
+          base_url = url.sub(/\/[^\/]+(\?.*)?$/, "/postgres\\1")
+
+          @output.puts "Creating PostgreSQL database: #{db_name}"
+
+          begin
+            # Connect to postgres database to create the target database
+            temp_db = DB.open(base_url)
+            temp_db.exec("CREATE DATABASE \"#{db_name}\"")
+            temp_db.close
+            @output.puts "Created database: #{db_name}"
+          rescue ex : PQ::PQError
+            if ex.message.try(&.includes?("already exists"))
+              @output.puts "Database already exists: #{db_name}"
+            else
+              @output.puts "Error creating database: #{ex.message}"
+              exit 1
+            end
+          end
         else
           @output.puts "Database creation not implemented for: #{url}"
           exit 1
@@ -271,13 +326,37 @@ module Ralph
         url = @database_url || database_url_for_env
 
         case url
-        when /^sqlite3:\/\/(.+)$/
+        when /^sqlite3?:\/\/(.+)$/
           path = $1
           if File.exists?(path)
             File.delete(path)
             @output.puts "Dropped database: #{path}"
           else
             @output.puts "Database does not exist: #{path}"
+          end
+        when /^postgres(?:ql)?:\/\//
+          # Extract database name from URL
+          db_name = extract_postgres_db_name(url)
+          base_url = url.sub(/\/[^\/]+(\?.*)?$/, "/postgres\\1")
+
+          @output.puts "Dropping PostgreSQL database: #{db_name}"
+
+          begin
+            # Connect to postgres database to drop the target database
+            temp_db = DB.open(base_url)
+            # Terminate existing connections first
+            temp_db.exec(<<-SQL)
+              SELECT pg_terminate_backend(pg_stat_activity.pid)
+              FROM pg_stat_activity
+              WHERE pg_stat_activity.datname = '#{db_name}'
+              AND pid <> pg_backend_pid()
+            SQL
+            temp_db.exec("DROP DATABASE IF EXISTS \"#{db_name}\"")
+            temp_db.close
+            @output.puts "Dropped database: #{db_name}"
+          rescue ex
+            @output.puts "Error dropping database: #{ex.message}"
+            exit 1
           end
         else
           @output.puts "Database dropping not implemented for: #{url}"
@@ -358,16 +437,11 @@ module Ralph
       private def reset_database(db)
         @output.puts "Resetting database..."
 
+        # Close existing connection before dropping
+        db.close
+
         # Drop existing database
-        url = @database_url || database_url_for_env
-        case url
-        when /^sqlite3:\/\/(.+)$/
-          path = $1
-          if File.exists?(path)
-            File.delete(path)
-            @output.puts "Dropped database: #{path}"
-          end
-        end
+        drop_database
 
         # Create database
         create_database
@@ -386,11 +460,14 @@ module Ralph
       end
 
       # Setup the database (create and migrate)
-      private def setup_database(db)
+      private def setup_database
         @output.puts "Setting up database..."
 
         # Create database
         create_database
+
+        # Initialize database connection
+        db = initialize_database
 
         # Run migrations
         @output.puts "Running migrations..."
@@ -409,6 +486,23 @@ module Ralph
       private def generate_scaffold(name : String, fields : Array(String))
         generator = Generators::ScaffoldGenerator.new(name, fields, @models_dir, @migrations_dir)
         generator.run
+      end
+
+      # Extract database name from a PostgreSQL URL
+      # Examples:
+      #   postgres://user:pass@localhost/mydb -> mydb
+      #   postgres://localhost/mydb?host=/tmp -> mydb
+      #   postgresql://user@host:5432/dbname -> dbname
+      private def extract_postgres_db_name(url : String) : String
+        # Remove query string first
+        url_without_query = url.split("?").first
+
+        # Get everything after the last /
+        if match = url_without_query.match(/\/([^\/]+)$/)
+          match[1]
+        else
+          raise "Could not extract database name from URL: #{url}"
+        end
       end
     end
   end
