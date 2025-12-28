@@ -15,8 +15,9 @@ Complete API documentation for Ralph, auto-generated from source code.
 - [`ColumnMetadata`](ralph-columnmetadata.md) - <p>Metadata about a column</p>
 - [`DeleteRestrictionError`](ralph-deleterestrictionerror.md) - <p>Exception raised when trying to destroy a record with dependent: :restrict_with_exception</p>
 - [`Model`](ralph-model.md) - <p>Base class for all ORM models</p>
+- [`PostgresBackend`](ralph-database-postgresbackend.md) - <p>PostgreSQL database backend implementation</p>
 - [`Settings`](ralph-settings.md) - <p>Global settings for the ORM</p>
-- [`SqliteBackend`](ralph-database-sqlitebackend.md) - <p>SQLite backend implementation</p>
+- [`SqliteBackend`](ralph-database-sqlitebackend.md) - <p>SQLite database backend implementation</p>
 
 ## Enums
 

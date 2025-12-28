@@ -22,12 +22,25 @@ shards install
 
 Ralph needs to know how to connect to your database. Configure it at your application's entry point (usually `src/your_app.cr`):
 
+### SQLite
+
 ```crystal
 require "ralph"
+require "ralph/backends/sqlite"
 
 Ralph.configure do |config|
-  # Currently Ralph supports SQLite
   config.database = Ralph::Database::SqliteBackend.new("sqlite3://./db.sqlite3")
+end
+```
+
+### PostgreSQL
+
+```crystal
+require "ralph"
+require "ralph/backends/postgres"
+
+Ralph.configure do |config|
+  config.database = Ralph::Database::PostgresBackend.new("postgres://user:pass@localhost:5432/my_db")
 end
 ```
 
@@ -52,11 +65,16 @@ end
 
 Ralph maps Crystal types to their SQL equivalents:
 
-- `String` → `TEXT`
-- `Int32`, `Int64` → `INTEGER`
-- `Float64` → `REAL`
-- `Bool` → `INTEGER (0/1)`
-- `Time` → `DATETIME`
+- `String` → `TEXT` / `VARCHAR`
+- `Int32`, `Int64` → `INTEGER` / `BIGINT` / `BIGSERIAL`
+- `Float64` → `REAL` / `DOUBLE PRECISION`
+- `Bool` → `INTEGER (0/1)` / `BOOLEAN`
+- `Time` → `DATETIME` / `TIMESTAMP`
+
+For PostgreSQL, Ralph also supports:
+- `UUID`
+- `JSONB`
+- `JSON`
 
 ## Basic CRUD Operations
 

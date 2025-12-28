@@ -13,7 +13,7 @@ An Active Record-style ORM for Crystal with a focus on developer experience, typ
 - **Callbacks** - Lifecycle hooks for model events
 - **Migration System** - Version-controlled schema changes with rollback support
 - **CLI Tool** - Command-line interface for database operations and code generation
-- **Pluggable Backends** - Currently SQLite with more planned
+- **Pluggable Backends** - Support for SQLite and PostgreSQL with more planned
 - **Explicit Over Implicit** - No lazy loading by default, predictable behavior
 
 ## Installation
@@ -32,11 +32,25 @@ Run `shards install`
 
 ### Configuration
 
+#### SQLite
+
 ```crystal
 require "ralph"
+require "ralph/backends/sqlite"
 
 Ralph.configure do |config|
   config.database = Ralph::Database::SqliteBackend.new("sqlite3://./db.sqlite3")
+end
+```
+
+#### PostgreSQL
+
+```crystal
+require "ralph"
+require "ralph/backends/postgres"
+
+Ralph.configure do |config|
+  config.database = Ralph::Database::PostgresBackend.new("postgres://user:pass@host:port/dbname")
 end
 ```
 

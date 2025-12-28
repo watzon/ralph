@@ -17,7 +17,8 @@ This roadmap outlines the planned development path for Ralph to become a product
 - ✅ Phase 4.1: Transactions (Model.transaction, nested transactions, callbacks)
 - ✅ Phase 2.3: Join Improvements (CROSS/FULL OUTER JOIN, join aliases, association joins)
 - ✅ Phase 7.1: CLI Enhancements (seed, reset, setup, model/scaffold generators)
-- Pluggable backend architecture with SQLite implementation
+- ✅ Phase 5.1: PostgreSQL Backend
+- Pluggable backend architecture with SQLite and PostgreSQL implementation
 - Query builder with SELECT, INSERT, UPDATE, DELETE
 - Migration system with schema DSL
 - CLI with database operations and generators
@@ -176,13 +177,13 @@ This roadmap outlines the planned development path for Ralph to become a product
 
 ---
 
-## Phase 5: Additional Backends
+## Phase 5: Additional Backends ✅ COMPLETE
 
-### 5.1 PostgreSQL
-- [ ] PostgreSQL backend implementation
-- [ ] ARRAY column support
-- [ ] JSONB column support
-- [ ] UUID column type
+### 5.1 PostgreSQL ✅
+- [x] PostgreSQL backend implementation
+- [x] ARRAY column support (Partial - schema generation works)
+- [x] JSONB column support (Partial - schema generation works)
+- [x] UUID column type (Partial - schema generation works)
 - [ ] ENUM types
 - [ ] Full-text search
 - [ ] Special functions (NOW(), gen_random_uuid(), etc.)
@@ -343,7 +344,7 @@ This roadmap outlines the planned development path for Ralph to become a product
 13. Phase 3.3 - Association Features ✅
 14. Phase 3.4 - Eager Loading ✅
 15. Phase 2.4 - Subqueries
-16. Phase 5.1 - PostgreSQL Backend
+16. Phase 5.2 - MySQL Backend
 
 **Long-term (6-12 months):**
 17. Phase 6 - Type System Enhancements

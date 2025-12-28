@@ -13,7 +13,7 @@ using the `column` macro.
 
 ### `.create`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1097)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1101)*
 
 Create a new record and save it
 
@@ -21,7 +21,7 @@ Create a new record and save it
 
 ### `.new`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1104)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1108)*
 
 Initialize with attributes
 
@@ -48,7 +48,7 @@ Find all records
 
 ### `.average(column : String) : Float64 | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1062)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1066)*
 
 Get the average of a column
 
@@ -77,7 +77,7 @@ Count all records
 
 ### `.count_by(column : String, value) : Int64`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1024)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1028)*
 
 Count records matching a column value
 
@@ -259,7 +259,7 @@ Find the last record
 
 ### `.maximum(column : String) : DB::Any | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1091)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1095)*
 
 Get the maximum value of a column
 
@@ -272,7 +272,7 @@ User.maximum(:age)
 
 ### `.minimum(column : String) : DB::Any | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1080)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1084)*
 
 Get the minimum value of a column
 
@@ -335,7 +335,7 @@ The block receives a Builder and should return the modified Builder
 
 ### `.reset_all_counter_caches(counter_column : String, child_class, foreign_key : String)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1003)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1007)*
 
 Reset all counter caches for this model to their actual counts
 
@@ -388,7 +388,7 @@ User.scoped { |q| q.where("age > ?", 18) }.limit(10)
 
 ### `.sum(column : String) : Float64 | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1044)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1048)*
 
 Get the sum of a column
 
@@ -438,7 +438,7 @@ Find records matching conditions (alias for query)
 
 ### `#_clear_preloaded!`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1180)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1184)*
 
 Clear all preloaded associations
 
@@ -446,7 +446,7 @@ Clear all preloaded associations
 
 ### `#_get_attribute(name : String) : DB::Any | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1407)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1411)*
 
 Runtime dynamic getter by string key name
 This is a method (not macro) that can be called across class boundaries
@@ -455,7 +455,7 @@ This is a method (not macro) that can be called across class boundaries
 
 ### `#_get_preloaded_many(association : String) : Array(Model) | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1170)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1174)*
 
 Get preloaded collection
 
@@ -463,7 +463,7 @@ Get preloaded collection
 
 ### `#_get_preloaded_one(association : String) : Model | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1165)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1169)*
 
 Get a preloaded single record
 
@@ -471,7 +471,7 @@ Get a preloaded single record
 
 ### `#_has_preloaded?(association : String) : Bool`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1175)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1179)*
 
 Check if an association has been preloaded
 
@@ -490,7 +490,7 @@ Base implementation - subclasses override this via macro
 
 ### `#_set_preloaded_many(association : String, records : Array(Model)) : Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1159)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1163)*
 
 Set preloaded collection (has_many)
 
@@ -498,7 +498,7 @@ Set preloaded collection (has_many)
 
 ### `#_set_preloaded_one(association : String, record : Model | Nil) : Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1153)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1157)*
 
 Set a preloaded single record (belongs_to, has_one)
 
@@ -506,7 +506,7 @@ Set a preloaded single record (belongs_to, has_one)
 
 ### `#changed?(attribute : String) : Bool`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1117)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1121)*
 
 Check if a specific attribute has changed
 
@@ -514,7 +514,7 @@ Check if a specific attribute has changed
 
 ### `#changed?`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1112)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1116)*
 
 Check if any attributes have changed
 
@@ -522,7 +522,7 @@ Check if any attributes have changed
 
 ### `#changed_attributes`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1122)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1126)*
 
 Get list of changed attributes
 
@@ -530,7 +530,7 @@ Get list of changed attributes
 
 ### `#changes`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1132)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1136)*
 
 Get changes as a hash of attribute => [old, new]
 
@@ -538,7 +538,7 @@ Get changes as a hash of attribute => [old, new]
 
 ### `#clear_changes_information`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1143)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1147)*
 
 Mark all attributes as clean (no changes)
 
@@ -554,7 +554,7 @@ Errors object accessor (using private ivar name to avoid conflicts)
 
 ### `#new_record?`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1295)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1299)*
 
 Check if this is a new record (not persisted)
 
@@ -562,7 +562,7 @@ Check if this is a new record (not persisted)
 
 ### `#original_value(attribute : String) : DB::Any | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1127)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1131)*
 
 Get original value of an attribute before changes
 
@@ -570,7 +570,7 @@ Get original value of an attribute before changes
 
 ### `#persisted?`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1300)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1304)*
 
 Check if this record has been persisted
 
@@ -578,7 +578,7 @@ Check if this record has been persisted
 
 ### `#reload`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1223)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1227)*
 
 Reload the record from the database
 
@@ -592,7 +592,7 @@ user.reload
 
 ### `#reset_counter_cache!(counter_column : String, child_class, foreign_key : String)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1016)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1020)*
 
 Instance method to reset a counter cache
 
@@ -600,7 +600,7 @@ Instance method to reset a counter cache
 
 ### `#to_h`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1337)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1341)*
 
 Convert model to hash
 
@@ -608,7 +608,7 @@ Convert model to hash
 
 ### `#update`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1206)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1210)*
 
 Update attributes and save the record
 
@@ -624,7 +624,7 @@ user.update(name: "New Name", age: 30)
 
 ### `.__get_by_key_name(name)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1421)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1425)*
 
 Dynamic getter by string key name
 
@@ -632,7 +632,7 @@ Dynamic getter by string key name
 
 ### `.__set_by_key_name(name, value)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1435)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1439)*
 
 Dynamic setter by string key name
 
@@ -658,7 +658,7 @@ This is a macro that generates a proper typed method in subclasses
 
 ### `.after_commit(method_name)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/transactions.cr#L179)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/transactions.cr#L174)*
 
 Register an after_commit callback
 
@@ -680,7 +680,7 @@ end
 
 ### `.after_rollback(method_name)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/transactions.cr#L214)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/transactions.cr#L209)*
 
 Register an after_rollback callback
 
@@ -709,7 +709,7 @@ Define a column on the model
 
 ### `.from_result_set(rs)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1349)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/model.cr#L1353)*
 
 Create a model instance from a result set
 

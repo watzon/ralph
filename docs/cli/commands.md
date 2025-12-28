@@ -18,7 +18,9 @@ These commands manage your database lifecycle, from creation to migrations and s
 
 ### `db:create`
 
-Creates the database defined in your configuration or specified via the `--database` flag.
+Creates the database defined in your configuration or specified via the `--database` flag. 
+
+For PostgreSQL, this connects to the default `postgres` database to execute the `CREATE DATABASE` command.
 
 **Usage:**
 
@@ -26,19 +28,26 @@ Creates the database defined in your configuration or specified via the `--datab
 ralph db:create
 ```
 
-**Example:**
+**Example (SQLite):**
 
 ```bash
 $ ralph db:create
 Created database: ./db/development.sqlite3
 ```
 
+**Example (PostgreSQL):**
+
+```bash
+$ DATABASE_URL=postgres://localhost/my_app_dev ralph db:create
+Created database: my_app_dev
+```
+
 ### `db:drop`
 
 !!! danger "Warning"
-This command will permanently delete your database and all its data. Use with extreme caution.
+    This command will permanently delete your database and all its data. Use with extreme caution.
 
-Drops the database.
+Drops the database. For PostgreSQL, this command will attempt to terminate all existing connections to the target database before dropping it.
 
 **Usage:**
 
@@ -89,11 +98,15 @@ Ralph's CLI can be customized to match your project's directory structure. For m
 
 ## Configuration
 
-The CLI looks for database configuration in several places:
+The CLI looks for database configuration in several places, in order of precedence:
 
-1.  The `--database` flag.
+1.  The `-d` or `--database` flag.
 2.  The `DATABASE_URL` environment variable.
-3.  A default SQLite URL based on the environment: `sqlite3://./db/#{environment}.sqlite3`.
+3.  The `POSTGRES_URL` environment variable.
+4.  The `SQLITE_URL` environment variable.
+5.  A default SQLite URL based on the environment: `sqlite3://./db/#{environment}.sqlite3`.
+
+The CLI automatically detects the database type from the URL scheme (`postgres://`, `postgresql://`, or `sqlite3://`).
 
 ---
 
@@ -123,7 +136,7 @@ Ensure you are using the correct command name. Check `ralph --help` for the list
 
 ### "Database creation not implemented"
 
-Ralph currently focus on SQLite. If you are using a different database URL scheme, it might not be supported yet for the `db:create` command.
+Ralph supports database creation for SQLite and PostgreSQL. Ensure your database URL scheme is supported (`sqlite3://`, `postgres://`, or `postgresql://`).
 
 ### "No migrations have been run"
 

@@ -24,13 +24,15 @@ Currently, Ralph supports the following configuration options:
 
 ## Database Backends
 
-Ralph uses a pluggable backend architecture. Currently, it supports SQLite through the `SqliteBackend` class.
+Ralph uses a pluggable backend architecture. Currently, it supports SQLite and PostgreSQL.
 
 ### SqliteBackend
 
 The `SqliteBackend` is initialized with a connection string. Ralph uses the standard `crystal-db` connection string format.
 
 ```crystal
+require "ralph/backends/sqlite"
+
 # File-based database
 Ralph::Database::SqliteBackend.new("sqlite3://./db/development.sqlite3")
 
@@ -38,16 +40,45 @@ Ralph::Database::SqliteBackend.new("sqlite3://./db/development.sqlite3")
 Ralph::Database::SqliteBackend.new("sqlite3::memory:")
 ```
 
+### PostgresBackend
+
+The `PostgresBackend` allows you to connect to a PostgreSQL database.
+
+```crystal
+require "ralph/backends/postgres"
+
+# Standard connection string
+Ralph::Database::PostgresBackend.new("postgres://user:pass@localhost:5432/my_database")
+
+# Using Unix sockets
+Ralph::Database::PostgresBackend.new("postgres://user@localhost/my_database?host=/var/run/postgresql")
+```
+
 ## Environment-Specific Configuration
 
-For real-world applications, you'll likely want different configurations for different environments (development, testing, production). A common pattern in Crystal applications is to use environment variables or a YAML configuration file.
+For real-world applications, you'll likely want different configurations for different environments (development, testing, production). A common pattern in Crystal applications is to use environment variables.
 
-### Using Environment Variables
+### Environment Variables
+
+Ralph's CLI and backends respect several environment variables for database configuration. They are checked in the following order:
+
+1. `DATABASE_URL` - General database URL
+2. `POSTGRES_URL` - PostgreSQL specific URL
+3. `SQLITE_URL` - SQLite specific URL
+
+### Configuration Example
 
 ```crystal
 Ralph.configure do |config|
-  db_url = ENV["DATABASE_URL"]? || "sqlite3://./db/development.sqlite3"
-  config.database = Ralph::Database::SqliteBackend.new(db_url)
+  db_url = ENV["DATABASE_URL"]? || ENV["SQLITE_URL"]? || "sqlite3://./db/development.sqlite3"
+  
+  if db_url.starts_with?("postgres")
+    require "ralph/backends/postgres"
+    config.database = Ralph::Database::PostgresBackend.new(db_url)
+  else
+    require "ralph/backends/sqlite"
+    config.database = Ralph::Database::SqliteBackend.new(db_url)
+  end
 end
 ```
 
