@@ -779,6 +779,161 @@ module Ralph
       end
 
       # ========================================
+      # JSON/JSONB Query Operators
+      # ========================================
+
+      # Extract a JSON value at the given path and compare it
+      #
+      # Uses backend-specific syntax:
+      # - PostgreSQL: column->>'path' = ?
+      # - SQLite: json_extract(column, '$.path') = ?
+      #
+      # Example:
+      # ```
+      # query.where_json("settings", "theme", "dark")
+      # # PostgreSQL: WHERE "settings"->>'theme' = 'dark'
+      # # SQLite: WHERE json_extract("settings", '$.theme') = 'dark'
+      # ```
+      def where_json(column : String, path : String, value : DBValue) : Builder
+        # Detect backend from Ralph settings if available
+        dialect = Ralph.settings.database?.try(&.dialect) || :sqlite
+        clause = case dialect
+                 when :postgres
+                   "\"#{column}\"->>'#{path}' = ?"
+                 else
+                   "json_extract(\"#{column}\", '$.#{path}') = ?"
+                 end
+        with_wheres(@wheres + [WhereClause.new(clause, [value] of DBValue)])
+      end
+
+      # Check if a JSON column contains the given key
+      #
+      # Example:
+      # ```
+      # query.where_json_has_key("metadata", "theme")
+      # # PostgreSQL: WHERE "metadata" ? 'theme'
+      # # SQLite: WHERE json_extract("metadata", '$.theme') IS NOT NULL
+      # ```
+      def where_json_has_key(column : String, key : String) : Builder
+        dialect = Ralph.settings.database?.try(&.dialect) || :sqlite
+        clause = case dialect
+                 when :postgres
+                   "\"#{column}\" ? '#{key}'"
+                 else
+                   "json_extract(\"#{column}\", '$.#{key}') IS NOT NULL"
+                 end
+        with_wheres(@wheres + [WhereClause.new(clause, [] of DBValue)])
+      end
+
+      # Check if a JSON column contains the given value (for JSONB in PostgreSQL)
+      #
+      # Example:
+      # ```
+      # query.where_json_contains("tags", "[\"crystal\", \"orm\"]")
+      # # PostgreSQL: WHERE "tags" @> '["crystal", "orm"]'
+      # # SQLite: Uses json_each for emulation
+      # ```
+      def where_json_contains(column : String, json_value : String) : Builder
+        dialect = Ralph.settings.database?.try(&.dialect) || :sqlite
+        clause = case dialect
+                 when :postgres
+                   "\"#{column}\" @> '#{json_value}'"
+                 else
+                   # SQLite emulation - check if JSON is valid and matches
+                   "json_valid(\"#{column}\") AND \"#{column}\" = '#{json_value}'"
+                 end
+        with_wheres(@wheres + [WhereClause.new(clause, [] of DBValue)])
+      end
+
+      # ========================================
+      # Array Query Operators
+      # ========================================
+
+      # Check if an array column contains a specific value
+      #
+      # Example:
+      # ```
+      # query.where_array_contains("tags", "crystal")
+      # # PostgreSQL: WHERE 'crystal' = ANY("tags")
+      # # SQLite: WHERE EXISTS (SELECT 1 FROM json_each("tags") WHERE value = 'crystal')
+      # ```
+      def where_array_contains(column : String, value : DBValue) : Builder
+        dialect = Ralph.settings.database?.try(&.dialect) || :sqlite
+        clause = case dialect
+                 when :postgres
+                   "? = ANY(\"#{column}\")"
+                 else
+                   # SQLite - arrays stored as JSON
+                   "EXISTS (SELECT 1 FROM json_each(\"#{column}\") WHERE value = ?)"
+                 end
+        with_wheres(@wheres + [WhereClause.new(clause, [value] of DBValue)])
+      end
+
+      # Check if an array column overlaps with the given values (has any common elements)
+      #
+      # Example:
+      # ```
+      # query.where_array_overlaps("tags", ["crystal", "ruby"])
+      # # PostgreSQL: WHERE "tags" && ARRAY['crystal', 'ruby']
+      # # SQLite: Emulated with json_each
+      # ```
+      def where_array_overlaps(column : String, values : Array(String)) : Builder
+        return self if values.empty?
+        dialect = Ralph.settings.database?.try(&.dialect) || :sqlite
+        clause = case dialect
+                 when :postgres
+                   quoted = values.map { |v| "'#{v}'" }.join(", ")
+                   "\"#{column}\" && ARRAY[#{quoted}]"
+                 else
+                   # SQLite - check if any value exists in the JSON array
+                   quoted = values.map { |v| "'#{v}'" }.join(", ")
+                   "EXISTS (SELECT 1 FROM json_each(\"#{column}\") WHERE value IN (#{quoted}))"
+                 end
+        with_wheres(@wheres + [WhereClause.new(clause, [] of DBValue)])
+      end
+
+      # Check if an array column is contained by the given values
+      #
+      # Example:
+      # ```
+      # query.where_array_contained_by("tags", ["crystal", "ruby", "elixir"])
+      # # PostgreSQL: WHERE "tags" <@ ARRAY['crystal', 'ruby', 'elixir']
+      # ```
+      def where_array_contained_by(column : String, values : Array(String)) : Builder
+        return self if values.empty?
+        dialect = Ralph.settings.database?.try(&.dialect) || :sqlite
+        clause = case dialect
+                 when :postgres
+                   quoted = values.map { |v| "'#{v}'" }.join(", ")
+                   "\"#{column}\" <@ ARRAY[#{quoted}]"
+                 else
+                   # SQLite - all elements in JSON array must be in the provided list
+                   quoted = values.map { |v| "'#{v}'" }.join(", ")
+                   "NOT EXISTS (SELECT 1 FROM json_each(\"#{column}\") WHERE value NOT IN (#{quoted}))"
+                 end
+        with_wheres(@wheres + [WhereClause.new(clause, [] of DBValue)])
+      end
+
+      # Check the length of an array column
+      #
+      # Example:
+      # ```
+      # query.where_array_length("tags", ">", 3)
+      # # PostgreSQL: WHERE array_length("tags", 1) > 3
+      # # SQLite: WHERE json_array_length("tags") > 3
+      # ```
+      def where_array_length(column : String, operator : String, length : Int32) : Builder
+        dialect = Ralph.settings.database?.try(&.dialect) || :sqlite
+        clause = case dialect
+                 when :postgres
+                   "array_length(\"#{column}\", 1) #{operator} ?"
+                 else
+                   "json_array_length(\"#{column}\") #{operator} ?"
+                 end
+        with_wheres(@wheres + [WhereClause.new(clause, [length.to_i64] of DBValue)])
+      end
+
+      # ========================================
       # Window Functions Support
       # ========================================
 

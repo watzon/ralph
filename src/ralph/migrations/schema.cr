@@ -80,6 +80,95 @@ module Ralph
           column(name.to_s, :json, default: default)
         end
 
+        # Enum column - stores enum values in the database
+        #
+        # ## Options
+        #
+        # - **values**: Array of allowed string values (required)
+        # - **storage**: Storage strategy - :string (default), :integer, or :native (PostgreSQL only)
+        # - **default**: Default value
+        #
+        # ## Example
+        #
+        # ```crystal
+        # create_table :users do |t|
+        #   t.enum :status, values: ["active", "inactive", "suspended"]
+        #   t.enum :priority, values: ["low", "medium", "high"], storage: :integer
+        # end
+        # ```
+        def enum(name : String, values : Array(String), storage : Symbol = :string, default : String | Nil = nil)
+          column(name.to_s, :enum, values: values.join(","), storage: storage, default: default)
+        end
+
+        # String array column
+        #
+        # - **PostgreSQL**: TEXT[]
+        # - **SQLite**: TEXT (JSON array)
+        #
+        # ## Example
+        #
+        # ```crystal
+        # create_table :posts do |t|
+        #   t.string_array :tags
+        # end
+        # ```
+        def string_array(name : String, default : String | Nil = nil)
+          column(name.to_s, :array, element_type: :text, default: default)
+        end
+
+        # Integer array column
+        #
+        # - **PostgreSQL**: INTEGER[]
+        # - **SQLite**: TEXT (JSON array)
+        def integer_array(name : String, default : String | Nil = nil)
+          column(name.to_s, :array, element_type: :integer, default: default)
+        end
+
+        # Bigint array column
+        #
+        # - **PostgreSQL**: BIGINT[]
+        # - **SQLite**: TEXT (JSON array)
+        def bigint_array(name : String, default : String | Nil = nil)
+          column(name.to_s, :array, element_type: :bigint, default: default)
+        end
+
+        # Float array column
+        #
+        # - **PostgreSQL**: DOUBLE PRECISION[]
+        # - **SQLite**: TEXT (JSON array)
+        def float_array(name : String, default : String | Nil = nil)
+          column(name.to_s, :array, element_type: :float, default: default)
+        end
+
+        # Boolean array column
+        #
+        # - **PostgreSQL**: BOOLEAN[]
+        # - **SQLite**: TEXT (JSON array)
+        def boolean_array(name : String, default : String | Nil = nil)
+          column(name.to_s, :array, element_type: :boolean, default: default)
+        end
+
+        # UUID array column
+        #
+        # - **PostgreSQL**: UUID[]
+        # - **SQLite**: TEXT (JSON array)
+        def uuid_array(name : String, default : String | Nil = nil)
+          column(name.to_s, :array, element_type: :uuid, default: default)
+        end
+
+        # Generic array column with custom element type
+        #
+        # ## Example
+        #
+        # ```crystal
+        # create_table :data do |t|
+        #   t.array :values, element_type: :float
+        # end
+        # ```
+        def array(name : String, element_type : Symbol = :text, default : String | Nil = nil)
+          column(name.to_s, :array, element_type: element_type, default: default)
+        end
+
         def binary(name : String, default : String | Nil = nil)
           column(name.to_s, :binary, default: default)
         end

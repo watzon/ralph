@@ -7,7 +7,7 @@ This roadmap outlines the planned development path for Ralph to become a product
 **Current Version:** 0.1.0
 
 **What's Working:**
-- ✅ **ALL IMMEDIATE MVP FEATURES COMPLETE** - Phase 1 + Phase 2.1 Advanced Clauses + Phase 2.2 Aggregates + Phase 3.1 Basic Associations (incl. Polymorphic) + Phase 3.2 Association Options + Phase 3.3 Association Features + Phase 3.4 Eager Loading + Phase 4.1 Transactions + Phase 2.3 Join Improvements + Phase 7.1 CLI Enhancements
+- ✅ **ALL IMMEDIATE MVP FEATURES COMPLETE** - Phase 1 + Phase 2.1 Advanced Clauses + Phase 2.2 Aggregates + Phase 3.1 Basic Associations (incl. Polymorphic) + Phase 3.2 Association Options + Phase 3.3 Association Features + Phase 3.4 Eager Loading + Phase 4.1 Transactions + Phase 2.3 Join Improvements + Phase 7.1 CLI Enhancements + Phase 6.1 Built-in Types + Phase 6.2 Custom Types
 - ✅ Phase 1: Core Model Features (CRUD, Validations, Callbacks, Attributes)
 - ✅ Phase 2.1: Advanced Clauses (GROUP BY, HAVING, DISTINCT)
 - ✅ Phase 2.2: Aggregates (count, sum, avg, min, max)
@@ -18,12 +18,15 @@ This roadmap outlines the planned development path for Ralph to become a product
 - ✅ Phase 2.3: Join Improvements (CROSS/FULL OUTER JOIN, join aliases, association joins)
 - ✅ Phase 7.1: CLI Enhancements (seed, reset, setup, model/scaffold generators)
 - ✅ Phase 5.1: PostgreSQL Backend
+- ✅ Phase 6.1: Built-in Types (Enum, JSON/JSONB, UUID, Arrays)
+- ✅ Phase 6.2: Custom Types (Type system infrastructure, backend-agnostic type support)
 - Pluggable backend architecture with SQLite and PostgreSQL implementation
 - Query builder with SELECT, INSERT, UPDATE, DELETE
 - Migration system with schema DSL
 - CLI with database operations and generators
 - Model base class with macros
-- **Comprehensive test coverage (437 tests, all passing)**
+- Advanced type system with backend-specific support
+- **Comprehensive test coverage (497 tests, all passing)**
 
 ---
 
@@ -202,17 +205,21 @@ This roadmap outlines the planned development path for Ralph to become a product
 
 ## Phase 6: Type System Enhancements
 
-### 6.1 Built-in Types
-- [ ] Enum support (`enum Status : Draft, Published, Archived`)
-- [ ] Array/Array types
-- [ ] JSON/JSONB columns
+### 6.1 Built-in Types ✅ COMPLETE
+- [x] Enum support with multiple storage strategies (string, integer, native)
+- [x] Array types (String[], Int32[], Int64[], Float64[], Bool[])
+- [x] JSON/JSONB columns with backend-aware storage
+- [x] UUID type with auto-generation support
 - [ ] Money/Decimal type with proper precision
 - [ ] Date/Time with timezone support
 - [ ] Interval type
 
-### 6.2 Custom Types
-- [ ] Type mapping system
-- [ ] User-defined types with serialization
+### 6.2 Custom Types ✅ COMPLETE
+- [x] Type mapping system (BaseType, Registry)
+- [x] User-defined types with serialization (cast/dump/load)
+- [x] Backend-specific type registration
+- [x] Migration DSL integration for advanced types
+- [x] Query builder operators for JSON and Arrays
 - [ ] Composed types (value objects)
 - [ ] Immutable types
 

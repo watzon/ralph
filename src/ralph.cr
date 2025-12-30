@@ -54,6 +54,7 @@ end
 # Core library requires
 require "./ralph/settings"
 require "./ralph/database"
+require "./ralph/types/types"
 require "./ralph/validations"
 require "./ralph/callbacks"
 require "./ralph/associations"

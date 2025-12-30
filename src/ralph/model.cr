@@ -1337,13 +1337,37 @@ module Ralph
       true
     end
 
-    # Convert model to hash
+    # Convert model to hash for database operations
+    # Handles serialization of advanced types (JSON, UUID, Array, Enum)
     def to_h : Hash(String, DB::Any)
       hash = {} of String => DB::Any
       {% for ivar in @type.instance_vars %}
         {% unless ivar.name.starts_with?("_") %}
-          value = {{ivar.name}}
-          hash[{{ivar.name.stringify}}] = value unless value.nil?
+          {% type_str = ivar.type.stringify %}
+          # Use getter to get default values if set
+          %value = {{ivar.name}}
+          unless %value.nil?
+            {% if type_str.includes?("JSON::Any") %}
+              # Serialize JSON::Any to string
+              hash[{{ivar.name.stringify}}] = %value.to_json
+            {% elsif type_str.includes?("UUID") %}
+              # Serialize UUID to string
+              hash[{{ivar.name.stringify}}] = %value.to_s
+            {% elsif type_str.includes?("Array(") %}
+              # Serialize Array to JSON string
+              hash[{{ivar.name.stringify}}] = %value.to_json
+            {% else %}
+              # Check if it's an enum type
+              {% resolved_type = ivar.type.union_types ? ivar.type.union_types.reject { |t| t == Nil }.first : ivar.type %}
+              {% if resolved_type.ancestors.any? { |a| a.stringify == "Enum" } %}
+                # Serialize enum to string (member name)
+                hash[{{ivar.name.stringify}}] = %value.to_s
+              {% else %}
+                # Standard types - pass through as DB::Any
+                hash[{{ivar.name.stringify}}] = %value
+              {% end %}
+            {% end %}
+          end
         {% end %}
       {% end %}
       hash
@@ -1376,12 +1400,6 @@ module Ralph
             {% else %}
               %instance.{{ivar.name}}={{rs}}.read(Float64)
             {% end %}
-          {% elsif type_str.includes?("String") %}
-            {% if nilable %}
-              %instance.{{ivar.name}}={{rs}}.read(String | Nil)
-            {% else %}
-              %instance.{{ivar.name}}={{rs}}.read(String)
-            {% end %}
           {% elsif type_str.includes?("Time") %}
             {% if nilable %}
               %instance.{{ivar.name}}={{rs}}.read(Time | Nil)
@@ -1394,8 +1412,147 @@ module Ralph
             {% else %}
               %instance.{{ivar.name}}={{rs}}.read(Bool)
             {% end %}
+          {% elsif type_str.includes?("JSON::Any") %}
+            # JSON::Any - stored as TEXT in database, parse on load
+            %raw_json = {{rs}}.read(String | Nil)
+            {% if nilable %}
+              if %raw_json.nil?
+                %instance.{{ivar.name}} = nil
+              else
+                begin
+                  %instance.{{ivar.name}} = JSON.parse(%raw_json)
+                rescue JSON::ParseException
+                  %instance.{{ivar.name}} = nil
+                end
+              end
+            {% else %}
+              if %raw_json
+                begin
+                  %instance.{{ivar.name}} = JSON.parse(%raw_json)
+                rescue JSON::ParseException
+                  %instance.{{ivar.name}} = JSON::Any.new(nil)
+                end
+              else
+                %instance.{{ivar.name}} = JSON::Any.new(nil)
+              end
+            {% end %}
+          {% elsif type_str.includes?("UUID") %}
+            # UUID - stored as CHAR(36) or UUID in database
+            %raw_uuid = {{rs}}.read(String | Nil)
+            {% if nilable %}
+              if %raw_uuid.nil?
+                %instance.{{ivar.name}} = nil
+              else
+                begin
+                  %instance.{{ivar.name}} = UUID.new(%raw_uuid)
+                rescue ArgumentError
+                  %instance.{{ivar.name}} = nil
+                end
+              end
+            {% else %}
+              if %raw_uuid
+                begin
+                  %instance.{{ivar.name}} = UUID.new(%raw_uuid)
+                rescue ArgumentError
+                  %instance.{{ivar.name}} = UUID.empty
+                end
+              else
+                %instance.{{ivar.name}} = UUID.empty
+              end
+            {% end %}
+          {% elsif type_str.includes?("Array(") %}
+            # Array types - stored as JSON in SQLite, native array in PostgreSQL
+            %raw_array = {{rs}}.read(String | Nil)
+            {% if nilable %}
+              if %raw_array.nil?
+                %instance.{{ivar.name}} = nil
+              else
+                begin
+                  %parsed = JSON.parse(%raw_array)
+                  if %arr = %parsed.as_a?
+                    # Determine element type from the type string
+                    {% element_type = type_str.gsub("Array(", "").gsub(")", "").gsub(" | Nil", "").strip %}
+                    {% if element_type == "String" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                    {% elsif element_type == "Int32" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_i? || 0 }
+                    {% elsif element_type == "Int64" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_i64? || v.as_i?.try(&.to_i64) || 0_i64 }
+                    {% elsif element_type == "Float64" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_f? || v.as_i?.try(&.to_f64) || 0.0 }
+                    {% elsif element_type == "Bool" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_bool? || false }
+                    {% else %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                    {% end %}
+                  else
+                    %instance.{{ivar.name}} = nil
+                  end
+                rescue JSON::ParseException
+                  %instance.{{ivar.name}} = nil
+                end
+              end
+            {% else %}
+              if %raw_array
+                begin
+                  %parsed = JSON.parse(%raw_array)
+                  if %arr = %parsed.as_a?
+                    {% element_type = type_str.gsub("Array(", "").gsub(")", "").gsub(" | Nil", "").strip %}
+                    {% if element_type == "String" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                    {% elsif element_type == "Int32" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_i? || 0 }
+                    {% elsif element_type == "Int64" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_i64? || v.as_i?.try(&.to_i64) || 0_i64 }
+                    {% elsif element_type == "Float64" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_f? || v.as_i?.try(&.to_f64) || 0.0 }
+                    {% elsif element_type == "Bool" %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_bool? || false }
+                    {% else %}
+                      %instance.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                    {% end %}
+                  else
+                    {% element_type = type_str.gsub("Array(", "").gsub(")", "").gsub(" | Nil", "").strip %}
+                    %instance.{{ivar.name}} = [] of {{element_type.id}}
+                  end
+                rescue JSON::ParseException
+                  {% element_type = type_str.gsub("Array(", "").gsub(")", "").gsub(" | Nil", "").strip %}
+                  %instance.{{ivar.name}} = [] of {{element_type.id}}
+                end
+              else
+                {% element_type = type_str.gsub("Array(", "").gsub(")", "").gsub(" | Nil", "").strip %}
+                %instance.{{ivar.name}} = [] of {{element_type.id}}
+              end
+            {% end %}
+          {% elsif type_str.includes?("String") %}
+            {% if nilable %}
+              %instance.{{ivar.name}}={{rs}}.read(String | Nil)
+            {% else %}
+              %instance.{{ivar.name}}={{rs}}.read(String)
+            {% end %}
           {% else %}
-            %instance.{{ivar.name}}={{rs}}.read(String | Nil)
+            # Check if it's an enum type (Crystal enums have a 'value' method)
+            {% resolved_type = ivar.type.union_types ? ivar.type.union_types.reject { |t| t == Nil }.first : ivar.type %}
+            {% if resolved_type.ancestors.any? { |a| a.stringify == "Enum" } %}
+              # Enum type - try to read as string first, then integer
+              %raw_enum = {{rs}}.read(String | Nil)
+              {% if nilable %}
+                if %raw_enum.nil?
+                  %instance.{{ivar.name}} = nil
+                else
+                  %instance.{{ivar.name}} = {{resolved_type}}.parse?(%raw_enum) || {{resolved_type}}.from_value?(%raw_enum.to_i?) || nil
+                end
+              {% else %}
+                if %raw_enum
+                  %instance.{{ivar.name}} = {{resolved_type}}.parse?(%raw_enum) || {{resolved_type}}.from_value?(%raw_enum.to_i?) || {{resolved_type}}.values.first
+                else
+                  %instance.{{ivar.name}} = {{resolved_type}}.values.first
+                end
+              {% end %}
+            {% else %}
+              # Default: try to read as string
+              %instance.{{ivar.name}}={{rs}}.read(String | Nil)
+            {% end %}
           {% end %}
         {% end %}
       {% end %}
@@ -1436,6 +1593,7 @@ module Ralph
     end
 
     # Dynamic setter by string key name
+    # Handles advanced types (JSON, UUID, Array, Enum) with proper type coercion
     macro __set_by_key_name(name, value)
       case {{name}}
       {% for ivar in @type.instance_vars %}
@@ -1509,17 +1667,6 @@ module Ralph
                   self.{{ivar.name}} = 0.0
                 end
               {% end %}
-            {% elsif type_str.includes?("String") %}
-              {% if nilable %}
-                %val = {{value}}
-                if %val.nil?
-                  self.{{ivar.name}} = nil
-                else
-                  self.{{ivar.name}} = %val.to_s
-                end
-              {% else %}
-                self.{{ivar.name}} = {{value}}.to_s
-              {% end %}
             {% elsif type_str.includes?("Time") %}
               {% if nilable %}
                 %val = {{value}}
@@ -1550,9 +1697,179 @@ module Ralph
                 %val = {{value}}
                 self.{{ivar.name}} = %val == true || (%val.to_s == "true")
               {% end %}
+            {% elsif type_str.includes?("JSON::Any") %}
+              # JSON::Any type
+              %val = {{value}}
+              {% if nilable %}
+                if %val.nil?
+                  self.{{ivar.name}} = nil
+                elsif %val.is_a?(JSON::Any)
+                  self.{{ivar.name}} = %val
+                elsif %val.is_a?(String)
+                  begin
+                    self.{{ivar.name}} = JSON.parse(%val)
+                  rescue JSON::ParseException
+                    self.{{ivar.name}} = nil
+                  end
+                elsif %val.is_a?(Hash) || %val.is_a?(Array)
+                  self.{{ivar.name}} = JSON.parse(%val.to_json)
+                else
+                  self.{{ivar.name}} = nil
+                end
+              {% else %}
+                if %val.is_a?(JSON::Any)
+                  self.{{ivar.name}} = %val
+                elsif %val.is_a?(String)
+                  begin
+                    self.{{ivar.name}} = JSON.parse(%val)
+                  rescue JSON::ParseException
+                    self.{{ivar.name}} = JSON::Any.new(nil)
+                  end
+                elsif %val.is_a?(Hash) || %val.is_a?(Array)
+                  self.{{ivar.name}} = JSON.parse(%val.to_json)
+                else
+                  self.{{ivar.name}} = JSON::Any.new(nil)
+                end
+              {% end %}
+            {% elsif type_str.includes?("UUID") %}
+              # UUID type
+              %val = {{value}}
+              {% if nilable %}
+                if %val.nil?
+                  self.{{ivar.name}} = nil
+                elsif %val.is_a?(UUID)
+                  self.{{ivar.name}} = %val
+                elsif %val.is_a?(String)
+                  begin
+                    self.{{ivar.name}} = UUID.new(%val)
+                  rescue ArgumentError
+                    self.{{ivar.name}} = nil
+                  end
+                else
+                  self.{{ivar.name}} = nil
+                end
+              {% else %}
+                if %val.is_a?(UUID)
+                  self.{{ivar.name}} = %val
+                elsif %val.is_a?(String)
+                  begin
+                    self.{{ivar.name}} = UUID.new(%val)
+                  rescue ArgumentError
+                    self.{{ivar.name}} = UUID.empty
+                  end
+                else
+                  self.{{ivar.name}} = UUID.empty
+                end
+              {% end %}
+            {% elsif type_str.includes?("Array(") %}
+              # Array type
+              %val = {{value}}
+              {% element_type = type_str.gsub("Array(", "").gsub(")", "").gsub(" | Nil", "").strip %}
+              {% if nilable %}
+                if %val.nil?
+                  self.{{ivar.name}} = nil
+                elsif %val.is_a?(Array)
+                  self.{{ivar.name}} = %val.as(Array({{element_type.id}}))
+                elsif %val.is_a?(String)
+                  begin
+                    %parsed = JSON.parse(%val)
+                    if %arr = %parsed.as_a?
+                      {% if element_type == "String" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                      {% elsif element_type == "Int32" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_i? || 0 }
+                      {% elsif element_type == "Int64" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_i64? || v.as_i?.try(&.to_i64) || 0_i64 }
+                      {% elsif element_type == "Float64" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_f? || v.as_i?.try(&.to_f64) || 0.0 }
+                      {% elsif element_type == "Bool" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_bool? || false }
+                      {% else %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                      {% end %}
+                    else
+                      self.{{ivar.name}} = nil
+                    end
+                  rescue JSON::ParseException
+                    self.{{ivar.name}} = nil
+                  end
+                else
+                  self.{{ivar.name}} = nil
+                end
+              {% else %}
+                if %val.is_a?(Array)
+                  self.{{ivar.name}} = %val.as(Array({{element_type.id}}))
+                elsif %val.is_a?(String)
+                  begin
+                    %parsed = JSON.parse(%val)
+                    if %arr = %parsed.as_a?
+                      {% if element_type == "String" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                      {% elsif element_type == "Int32" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_i? || 0 }
+                      {% elsif element_type == "Int64" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_i64? || v.as_i?.try(&.to_i64) || 0_i64 }
+                      {% elsif element_type == "Float64" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_f? || v.as_i?.try(&.to_f64) || 0.0 }
+                      {% elsif element_type == "Bool" %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_bool? || false }
+                      {% else %}
+                        self.{{ivar.name}} = %arr.map { |v| v.as_s? || v.raw.to_s }
+                      {% end %}
+                    else
+                      self.{{ivar.name}} = [] of {{element_type.id}}
+                    end
+                  rescue JSON::ParseException
+                    self.{{ivar.name}} = [] of {{element_type.id}}
+                  end
+                else
+                  self.{{ivar.name}} = [] of {{element_type.id}}
+                end
+              {% end %}
+            {% elsif type_str.includes?("String") %}
+              {% if nilable %}
+                %val = {{value}}
+                if %val.nil?
+                  self.{{ivar.name}} = nil
+                else
+                  self.{{ivar.name}} = %val.to_s
+                end
+              {% else %}
+                self.{{ivar.name}} = {{value}}.to_s
+              {% end %}
             {% else %}
-              # For complex types (Array, Hash, etc.), just assign directly
-              self.{{ivar.name}} = {{value}}
+              # Check for enum type and other complex types
+              {% resolved_type = ivar.type.union_types ? ivar.type.union_types.reject { |t| t == Nil }.first : ivar.type %}
+              {% if resolved_type.ancestors.any? { |a| a.stringify == "Enum" } %}
+                # Enum type
+                %val = {{value}}
+                {% if nilable %}
+                  if %val.nil?
+                    self.{{ivar.name}} = nil
+                  elsif %val.is_a?({{resolved_type}})
+                    self.{{ivar.name}} = %val
+                  elsif %val.is_a?(String)
+                    self.{{ivar.name}} = {{resolved_type}}.parse?(%val)
+                  elsif %val.is_a?(Int32) || %val.is_a?(Int64)
+                    self.{{ivar.name}} = {{resolved_type}}.from_value?(%val.to_i)
+                  else
+                    self.{{ivar.name}} = nil
+                  end
+                {% else %}
+                  if %val.is_a?({{resolved_type}})
+                    self.{{ivar.name}} = %val
+                  elsif %val.is_a?(String)
+                    self.{{ivar.name}} = {{resolved_type}}.parse?(%val) || {{resolved_type}}.values.first
+                  elsif %val.is_a?(Int32) || %val.is_a?(Int64)
+                    self.{{ivar.name}} = {{resolved_type}}.from_value?(%val.to_i) || {{resolved_type}}.values.first
+                  else
+                    self.{{ivar.name}} = {{resolved_type}}.values.first
+                  end
+                {% end %}
+              {% else %}
+                # For other complex types, just assign directly
+                self.{{ivar.name}} = {{value}}
+              {% end %}
             {% end %}
         {% end %}
       {% end %}
