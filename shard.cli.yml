@@ -8,7 +8,16 @@ crystal: '>= 1.18.2'
 
 license: MIT
 
-development_dependencies:
+# CLI-specific shard file
+# Use this when building the ralph CLI binary:
+#   shards install --shard-file=shard.cli.yml
+#   crystal build src/bin/ralph.cr -o bin/ralph --release
+
+targets:
+  ralph:
+    main: src/bin/ralph.cr
+
+dependencies:
   sqlite3:
     github: crystal-lang/crystal-sqlite3
     version: ~> 0.22.0

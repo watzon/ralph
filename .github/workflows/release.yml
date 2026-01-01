@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish-binaries:
+    runs-on: ubuntu-latest
+    needs: ci
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ralph-*
+          merge-multiple: true
+
+      - name: Verify all binaries present
+        run: |
+          set -euo pipefail
+
+          expected_binaries=(
+            "ralph-linux-amd64"
+            "ralph-linux-arm64"
+            "ralph-darwin-amd64"
+            "ralph-darwin-arm64"
+            "ralph-windows-amd64.exe"
+          )
+
+          echo "Looking for binaries..."
+          ls -la
+
+          for binary in "${expected_binaries[@]}"; do
+            if [[ ! -f "$binary" ]]; then
+              echo "Error: missing required binary: $binary"
+              exit 2
+            fi
+            echo "Found: $binary"
+          done
+
+          echo "All required binaries present!"
+
+      - name: Make binaries executable
+        run: chmod +x ralph-* || true
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ralph-*
+          file_glob: true
+          tag: ${{ github.ref_name }}
+          overwrite: true
