@@ -316,7 +316,7 @@ module Ralph
             \{% end %}
           \{% end %}
 
-          query = Query::Builder.new(self.class.table_name)
+          query = Ralph::Query::Builder.new(self.class.table_name)
             .where("#{self.class.primary_key} = ?", primary_key_value)
 
           sql, args = query.build_delete
@@ -454,10 +454,31 @@ module Ralph
       @@columns
     end
 
+    # Get column names in the order they should be read from result sets.
+    # This matches the order of instance variables in from_result_set.
+    # Generated at compile time to ensure consistency.
+    def self.column_names_ordered : Array(String)
+      {% begin %}
+        [
+          {% for ivar in @type.instance_vars %}
+            {% unless ivar.name.starts_with?("_") %}
+              {{ivar.name.stringify}},
+            {% end %}
+          {% end %}
+        ]
+      {% end %}
+    end
+
+    # Create a base query builder with columns selected in the correct order
+    # for from_result_set to read them properly. This ensures column order
+    # matches instance variable order regardless of database schema order.
+    protected def self.base_query : Ralph::Query::Builder
+      Ralph::Query::Builder.new(self.table_name).select(column_names_ordered)
+    end
+
     # Find a record by ID
     def self.find(id)
-      query = Query::Builder.new(self.table_name)
-        .where("#{@@primary_key} = ?", id)
+      query = base_query.where("#{@@primary_key} = ?", id)
 
       result = Ralph.database.query_one(query.build_select, args: query.where_args)
       return nil unless result
@@ -469,7 +490,7 @@ module Ralph
 
     # Find all records
     def self.all : Array(self)
-      query = Query::Builder.new(self.table_name)
+      query = base_query
       results = Ralph.database.query_all(query.build_select)
 
       records = [] of self
@@ -482,20 +503,20 @@ module Ralph
     end
 
     # Get a query builder for this model
-    def self.query : Query::Builder
-      Query::Builder.new(self.table_name)
+    def self.query : Ralph::Query::Builder
+      Ralph::Query::Builder.new(self.table_name)
     end
 
     # Find records matching conditions
     # The block receives a Builder and should return the modified Builder
     # (since Builder is immutable, each method returns a new instance)
-    def self.query(&block : Query::Builder -> Query::Builder) : Query::Builder
-      query = Query::Builder.new(self.table_name)
+    def self.query(&block : Ralph::Query::Builder -> Ralph::Query::Builder) : Ralph::Query::Builder
+      query = Ralph::Query::Builder.new(self.table_name)
       block.call(query)
     end
 
     # Find records matching conditions (alias for query)
-    def self.with_query(&block : Query::Builder -> Query::Builder) : Query::Builder
+    def self.with_query(&block : Ralph::Query::Builder -> Ralph::Query::Builder) : Ralph::Query::Builder
       query(&block)
     end
 
@@ -506,9 +527,9 @@ module Ralph
     # Define a named scope for this model
     #
     # Scopes are reusable query fragments that can be chained together.
-    # They're defined as class methods that return Query::Builder instances.
+    # They're defined as class methods that return Ralph::Query::Builder instances.
     #
-    # The block receives a Query::Builder and should return it after applying conditions.
+    # The block receives a Ralph::Query::Builder and should return it after applying conditions.
     #
     # Example without arguments:
     # ```
@@ -518,8 +539,8 @@ module Ralph
     #   column active, Bool
     #   column age, Int32
     #
-    #   scope :active, ->(q : Query::Builder) { q.where("active = ?", true) }
-    #   scope :adults, ->(q : Query::Builder) { q.where("age >= ?", 18) }
+    #   scope :active, ->(q : Ralph::Query::Builder) { q.where("active = ?", true) }
+    #   scope :adults, ->(q : Ralph::Query::Builder) { q.where("age >= ?", 18) }
     # end
     #
     # User.active                    # Returns Builder with active = true
@@ -530,8 +551,8 @@ module Ralph
     # Example with arguments:
     # ```
     # class User < Ralph::Model
-    #   scope :older_than, ->(q : Query::Builder, age : Int32) { q.where("age > ?", age) }
-    #   scope :with_role, ->(q : Query::Builder, role : String) { q.where("role = ?", role) }
+    #   scope :older_than, ->(q : Ralph::Query::Builder, age : Int32) { q.where("age > ?", age) }
+    #   scope :with_role, ->(q : Ralph::Query::Builder, role : String) { q.where("role = ?", role) }
     # end
     #
     # User.older_than(21)
@@ -544,8 +565,8 @@ module Ralph
         # Since Builder is immutable, the block body returns the modified builder
         {% query_arg = block.args[0] %}
         {% query_var_name = query_arg.is_a?(TypeDeclaration) ? query_arg.var : query_arg %}
-        def self.{{name.id}} : Query::Builder
-          {{query_var_name.id}} = Query::Builder.new(self.table_name)
+        def self.{{name.id}} : Ralph::Query::Builder
+          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name)
           {{block.body}}
         end
       {% else %}
@@ -562,8 +583,8 @@ module Ralph
               __scope_arg_{{idx}}__{% if idx < user_args.size - 1 %},{% end %}
             {% end %}
           {% end %}
-        ) : Query::Builder
-          {{query_var_name.id}} = Query::Builder.new(self.table_name)
+        ) : Ralph::Query::Builder
+          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name)
           # Assign scope args to their expected names
           {% for arg, idx in user_args %}
             {% if arg.is_a?(TypeDeclaration) %}
@@ -590,44 +611,44 @@ module Ralph
     # User.scoped { |q| q.where("active = ?", true).order("name", :asc) }
     # User.scoped { |q| q.where("age > ?", 18) }.limit(10)
     # ```
-    def self.scoped(&block : Query::Builder -> Query::Builder) : Query::Builder
-      query = Query::Builder.new(self.table_name)
+    def self.scoped(&block : Ralph::Query::Builder -> Ralph::Query::Builder) : Ralph::Query::Builder
+      query = Ralph::Query::Builder.new(self.table_name)
       block.call(query)
     end
 
     # Build a query with GROUP BY clause
-    def self.group_by(*columns : String) : Query::Builder
-      Query::Builder.new(self.table_name).group(*columns)
+    def self.group_by(*columns : String) : Ralph::Query::Builder
+      Ralph::Query::Builder.new(self.table_name).group(*columns)
     end
 
     # Build a query with GROUP BY clause and block
     # The block receives a Builder and should return the modified Builder
-    def self.group_by(*columns : String, &block : Query::Builder -> Query::Builder) : Query::Builder
-      query = Query::Builder.new(self.table_name).group(*columns)
+    def self.group_by(*columns : String, &block : Ralph::Query::Builder -> Ralph::Query::Builder) : Ralph::Query::Builder
+      query = Ralph::Query::Builder.new(self.table_name).group(*columns)
       block.call(query)
     end
 
     # Build a query with DISTINCT
-    def self.distinct : Query::Builder
-      Query::Builder.new(self.table_name).distinct
+    def self.distinct : Ralph::Query::Builder
+      Ralph::Query::Builder.new(self.table_name).distinct
     end
 
     # Build a query with DISTINCT and block
     # The block receives a Builder and should return the modified Builder
-    def self.distinct(&block : Query::Builder -> Query::Builder) : Query::Builder
-      query = Query::Builder.new(self.table_name).distinct
+    def self.distinct(&block : Ralph::Query::Builder -> Ralph::Query::Builder) : Ralph::Query::Builder
+      query = Ralph::Query::Builder.new(self.table_name).distinct
       block.call(query)
     end
 
     # Build a query with DISTINCT on specific columns
-    def self.distinct(*columns : String) : Query::Builder
-      Query::Builder.new(self.table_name).distinct(*columns)
+    def self.distinct(*columns : String) : Ralph::Query::Builder
+      Ralph::Query::Builder.new(self.table_name).distinct(*columns)
     end
 
     # Build a query with DISTINCT on specific columns and block
     # The block receives a Builder and should return the modified Builder
-    def self.distinct(*columns : String, &block : Query::Builder -> Query::Builder) : Query::Builder
-      query = Query::Builder.new(self.table_name).distinct(*columns)
+    def self.distinct(*columns : String, &block : Ralph::Query::Builder -> Ralph::Query::Builder) : Ralph::Query::Builder
+      query = Ralph::Query::Builder.new(self.table_name).distinct(*columns)
       block.call(query)
     end
 
@@ -642,8 +663,8 @@ module Ralph
     # Post.join_assoc(:author, :left) # LEFT JOIN users ON users.id = posts.user_id
     # User.join_assoc(:posts, :inner, "p") # INNER JOIN posts AS p ON p.user_id = users.id
     # ```
-    def self.join_assoc(association_name : Symbol, join_type : Symbol = :inner, alias as_alias : String? = nil) : Query::Builder
-      query = Query::Builder.new(self.table_name)
+    def self.join_assoc(association_name : Symbol, join_type : Symbol = :inner, alias as_alias : String? = nil) : Ralph::Query::Builder
+      query = Ralph::Query::Builder.new(self.table_name)
 
       # Get association metadata for this model
       type_str = self.to_s
@@ -796,7 +817,9 @@ module Ralph
 
     # Helper for preloading - fetch all records matching a query
     # This is called by the generated _preload_* methods
-    def self._preload_fetch_all(query : Query::Builder) : Array(self)
+    def self._preload_fetch_all(query : Ralph::Query::Builder) : Array(self)
+      # Ensure we select columns in the correct order for from_result_set
+      query = query.select(column_names_ordered) if query.selects.empty?
       results = Ralph.database.query_all(query.build_select, args: query.where_args)
       records = [] of self
       results.each do
@@ -809,7 +832,7 @@ module Ralph
 
     # Find the first record matching conditions
     def self.first : self?
-      query = Query::Builder.new(self.table_name)
+      query = base_query
         .limit(1)
         .order(@@primary_key, :asc)
 
@@ -823,7 +846,7 @@ module Ralph
 
     # Find the last record
     def self.last : self?
-      query = Query::Builder.new(self.table_name)
+      query = base_query
         .limit(1)
         .order(@@primary_key, :desc)
 
@@ -842,7 +865,7 @@ module Ralph
     # User.find_by("email", "user@example.com")
     # ```
     def self.find_by(column : String, value) : self?
-      query = Query::Builder.new(self.table_name)
+      query = base_query
         .where("#{column} = ?", value)
         .limit(1)
 
@@ -861,7 +884,7 @@ module Ralph
     # User.find_all_by("age", 25)
     # ```
     def self.find_all_by(column : String, value) : Array(self)
-      query = Query::Builder.new(self.table_name)
+      query = base_query
         .where("#{column} = ?", value)
 
       results = Ralph.database.query_all(query.build_select, args: query.where_args)
@@ -884,7 +907,7 @@ module Ralph
     # Comment.find_all_by_conditions({"commentable_type" => "Post", "commentable_id" => 1})
     # ```
     def self.find_all_by_conditions(conditions : Hash(String, DB::Any)) : Array(self)
-      query = Query::Builder.new(self.table_name)
+      query = base_query
       conditions.each do |column, value|
         query = query.where("\"#{column}\" = ?", value)
       end
@@ -904,7 +927,7 @@ module Ralph
     # Used primarily for polymorphic associations where we need to match
     # both type and id columns.
     def self.find_by_conditions(conditions : Hash(String, DB::Any)) : self?
-      query = Query::Builder.new(self.table_name)
+      query = base_query
       conditions.each do |column, value|
         query = query.where("\"#{column}\" = ?", value)
       end
@@ -929,7 +952,9 @@ module Ralph
     # query.where("age > ?", 18)
     # User.find_all_with_query(query)
     # ```
-    def self.find_all_with_query(query : Query::Builder) : Array(self)
+    def self.find_all_with_query(query : Ralph::Query::Builder) : Array(self)
+      # Ensure we select columns in the correct order for from_result_set
+      query = query.select(column_names_ordered) if query.selects.empty?
       results = Ralph.database.query_all(query.build_select, args: query.where_args)
       records = [] of self
       results.each do
@@ -943,7 +968,7 @@ module Ralph
     # Count records using a pre-built query builder
     #
     # Used for counting scoped associations.
-    def self.count_with_query(query : Query::Builder) : Int32
+    def self.count_with_query(query : Ralph::Query::Builder) : Int32
       result = Ralph.database.scalar(query.build_count, args: query.where_args)
       return 0 unless result
 
@@ -956,7 +981,7 @@ module Ralph
 
     # Count all records
     def self.count : Int64
-      query = Query::Builder.new(self.table_name)
+      query = Ralph::Query::Builder.new(self.table_name)
       result = Ralph.database.scalar(query.build_count)
       return 0_i64 unless result
 
@@ -1026,7 +1051,7 @@ module Ralph
 
     # Count records matching a column value
     def self.count_by(column : String, value) : Int64
-      query = Query::Builder.new(self.table_name)
+      query = Ralph::Query::Builder.new(self.table_name)
         .where("#{column} = ?", value)
 
       result = Ralph.database.scalar(query.build_count, args: query.where_args)
@@ -1046,7 +1071,7 @@ module Ralph
     # User.sum(:age)
     # ```
     def self.sum(column : String) : Float64?
-      query = Query::Builder.new(self.table_name)
+      query = Ralph::Query::Builder.new(self.table_name)
       result = Ralph.database.scalar(query.build_sum(column))
       return nil unless result
 
@@ -1064,7 +1089,7 @@ module Ralph
     # User.average(:age)
     # ```
     def self.average(column : String) : Float64?
-      query = Query::Builder.new(self.table_name)
+      query = Ralph::Query::Builder.new(self.table_name)
       result = Ralph.database.scalar(query.build_avg(column))
       return nil unless result
 
@@ -1082,7 +1107,7 @@ module Ralph
     # User.minimum(:age)
     # ```
     def self.minimum(column : String) : DB::Any?
-      query = Query::Builder.new(self.table_name)
+      query = Ralph::Query::Builder.new(self.table_name)
       Ralph.database.scalar(query.build_min(column))
     end
 
@@ -1093,7 +1118,7 @@ module Ralph
     # User.maximum(:age)
     # ```
     def self.maximum(column : String) : DB::Any?
-      query = Query::Builder.new(self.table_name)
+      query = Ralph::Query::Builder.new(self.table_name)
       Ralph.database.scalar(query.build_max(column))
     end
 
@@ -1227,7 +1252,7 @@ module Ralph
     def reload : self
       return self if new_record?
 
-      query = Query::Builder.new(self.class.table_name)
+      query = self.class.base_query
         .where("#{self.class.primary_key} = ?", primary_key_value)
 
       result = Ralph.database.query_one(query.build_select, args: query.where_args)
@@ -1312,7 +1337,7 @@ module Ralph
 
     # Insert a new record
     private def insert
-      query = Query::Builder.new(self.class.table_name)
+      query = Ralph::Query::Builder.new(self.class.table_name)
       data = to_h
       data.delete(self.class.primary_key) if data[self.class.primary_key]?.nil?
 
@@ -1325,7 +1350,7 @@ module Ralph
 
     # Update an existing record
     private def update_record
-      query = Query::Builder.new(self.class.table_name)
+      query = Ralph::Query::Builder.new(self.class.table_name)
         .where("#{self.class.primary_key} = ?", primary_key_value)
 
       data = to_h

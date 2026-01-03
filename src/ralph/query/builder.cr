@@ -422,6 +422,11 @@ module Ralph
         with_selects(@selects + columns.to_a)
       end
 
+      # Select specific columns from an array (returns new Builder)
+      def select(columns : Array(String)) : Builder
+        with_selects(@selects + columns)
+      end
+
       # Add a WHERE clause (returns new Builder)
       def where(clause : String, *args) : Builder
         converted = args.to_a.map { |a| a.as(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil) }

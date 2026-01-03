@@ -254,7 +254,7 @@ module Ralph
 
       # Register the association metadata
       {% if @type.has_constant?("_ralph_associations") %}
-        @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
+        @@_ralph_associations[{{name_str}}] = Ralph::AssociationMetadata.new(
           {{name_str}},
           {% if is_polymorphic %}"Ralph::Model"{% else %}{{class_name}}{% end %},
           {{foreign_key_str}},
@@ -263,7 +263,7 @@ module Ralph
           nil,
           nil,
           {{primary_key}},
-          DependentBehavior::None,
+          Ralph::DependentBehavior::None,
           {{class_name_override}},
           {{foreign_key_override}},
           {{primary_key_override}},
@@ -274,8 +274,8 @@ module Ralph
           nil
         )
       {% else %}
-        @@_ralph_associations = Hash(String, AssociationMetadata).new
-        @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
+        @@_ralph_associations = Hash(String, Ralph::AssociationMetadata).new
+        @@_ralph_associations[{{name_str}}] = Ralph::AssociationMetadata.new(
           {{name_str}},
           {% if is_polymorphic %}"Ralph::Model"{% else %}{{class_name}}{% end %},
           {{foreign_key_str}},
@@ -284,7 +284,7 @@ module Ralph
           nil,
           nil,
           {{primary_key}},
-          DependentBehavior::None,
+          Ralph::DependentBehavior::None,
           {{class_name_override}},
           {{foreign_key_override}},
           {{primary_key_override}},
@@ -622,7 +622,7 @@ module Ralph
 
       # Register the association metadata
       {% if @type.has_constant?("_ralph_associations") %}
-        @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
+        @@_ralph_associations[{{name_str}}] = Ralph::AssociationMetadata.new(
           {{name_str}},
           {{class_name}},
           {{foreign_key_str}},
@@ -632,17 +632,17 @@ module Ralph
           nil,
           {{primary_key}},
           {% if dependent_sym == "destroy" %}
-            DependentBehavior::Destroy,
+            Ralph::DependentBehavior::Destroy,
           {% elsif dependent_sym == "delete" %}
-            DependentBehavior::Delete,
+            Ralph::DependentBehavior::Delete,
           {% elsif dependent_sym == "nullify" %}
-            DependentBehavior::Nullify,
+            Ralph::DependentBehavior::Nullify,
           {% elsif dependent_sym == "restrict_with_error" %}
-            DependentBehavior::RestrictWithError,
+            Ralph::DependentBehavior::RestrictWithError,
           {% elsif dependent_sym == "restrict_with_exception" %}
-            DependentBehavior::RestrictWithException,
+            Ralph::DependentBehavior::RestrictWithException,
           {% else %}
-            DependentBehavior::None,
+            Ralph::DependentBehavior::None,
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
@@ -654,8 +654,8 @@ module Ralph
           nil
         )
       {% else %}
-        @@_ralph_associations = Hash(String, AssociationMetadata).new
-        @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
+        @@_ralph_associations = Hash(String, Ralph::AssociationMetadata).new
+        @@_ralph_associations[{{name_str}}] = Ralph::AssociationMetadata.new(
           {{name_str}},
           {{class_name}},
           {{foreign_key_str}},
@@ -665,17 +665,17 @@ module Ralph
           nil,
           {{primary_key}},
           {% if dependent_sym == "destroy" %}
-            DependentBehavior::Destroy,
+            Ralph::DependentBehavior::Destroy,
           {% elsif dependent_sym == "delete" %}
-            DependentBehavior::Delete,
+            Ralph::DependentBehavior::Delete,
           {% elsif dependent_sym == "nullify" %}
-            DependentBehavior::Nullify,
+            Ralph::DependentBehavior::Nullify,
           {% elsif dependent_sym == "restrict_with_error" %}
-            DependentBehavior::RestrictWithError,
+            Ralph::DependentBehavior::RestrictWithError,
           {% elsif dependent_sym == "restrict_with_exception" %}
-            DependentBehavior::RestrictWithException,
+            Ralph::DependentBehavior::RestrictWithException,
           {% else %}
-            DependentBehavior::None,
+            Ralph::DependentBehavior::None,
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
@@ -1004,7 +1004,7 @@ module Ralph
 
       # Register the association metadata
       {% if @type.has_constant?("_ralph_associations") %}
-        @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
+        @@_ralph_associations[{{name_str}}] = Ralph::AssociationMetadata.new(
           {{name_str}},
           {{class_name}},
           {{foreign_key_str}},
@@ -1014,17 +1014,17 @@ module Ralph
           {{source_name}},
           {{primary_key}},
           {% if dependent_sym == "destroy" %}
-            DependentBehavior::Destroy,
+            Ralph::DependentBehavior::Destroy,
           {% elsif dependent_sym == "delete_all" || dependent_sym == "delete" %}
-            DependentBehavior::Delete,
+            Ralph::DependentBehavior::Delete,
           {% elsif dependent_sym == "nullify" %}
-            DependentBehavior::Nullify,
+            Ralph::DependentBehavior::Nullify,
           {% elsif dependent_sym == "restrict_with_error" %}
-            DependentBehavior::RestrictWithError,
+            Ralph::DependentBehavior::RestrictWithError,
           {% elsif dependent_sym == "restrict_with_exception" %}
-            DependentBehavior::RestrictWithException,
+            Ralph::DependentBehavior::RestrictWithException,
           {% else %}
-            DependentBehavior::None,
+            Ralph::DependentBehavior::None,
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
@@ -1036,8 +1036,8 @@ module Ralph
           nil
         )
       {% else %}
-        @@_ralph_associations = Hash(String, AssociationMetadata).new
-        @@_ralph_associations[{{name_str}}] = AssociationMetadata.new(
+        @@_ralph_associations = Hash(String, Ralph::AssociationMetadata).new
+        @@_ralph_associations[{{name_str}}] = Ralph::AssociationMetadata.new(
           {{name_str}},
           {{class_name}},
           {{foreign_key_str}},
@@ -1047,17 +1047,17 @@ module Ralph
           {{source_name}},
           {{primary_key}},
           {% if dependent_sym == "destroy" %}
-            DependentBehavior::Destroy,
+            Ralph::DependentBehavior::Destroy,
           {% elsif dependent_sym == "delete_all" || dependent_sym == "delete" %}
-            DependentBehavior::Delete,
+            Ralph::DependentBehavior::Delete,
           {% elsif dependent_sym == "nullify" %}
-            DependentBehavior::Nullify,
+            Ralph::DependentBehavior::Nullify,
           {% elsif dependent_sym == "restrict_with_error" %}
-            DependentBehavior::RestrictWithError,
+            Ralph::DependentBehavior::RestrictWithError,
           {% elsif dependent_sym == "restrict_with_exception" %}
-            DependentBehavior::RestrictWithException,
+            Ralph::DependentBehavior::RestrictWithException,
           {% else %}
-            DependentBehavior::None,
+            Ralph::DependentBehavior::None,
           {% end %}
           {{class_name_override}},
           {{foreign_key_override}},
