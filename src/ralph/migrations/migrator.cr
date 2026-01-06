@@ -151,7 +151,9 @@ module Ralph
       # Check if a migration has been applied
       private def applied?(version : String) : Bool
         result = @database.query_one("SELECT 1 FROM schema_migrations WHERE version = ? LIMIT 1", args: [version] of DB::Any)
-        !!result
+        found = !!result
+        result.close if result
+        found
       rescue
         false
       end

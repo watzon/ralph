@@ -30,10 +30,10 @@ module Ralph
       end
 
       # Apply the migration
-      abstract def up : Nil
+      abstract def up
 
       # Rollback the migration
-      abstract def down : Nil
+      abstract def down
 
       # Get the migration version number
       #
@@ -45,7 +45,7 @@ module Ralph
       # Macro to set the migration version
       macro migration_version(num)
         def self.version : String
-          \{{num.stringify}}
+          {{num.stringify}}
         end
       end
 
@@ -113,11 +113,11 @@ module Ralph
       #
       # ## Usage
       #
-      # ```crystal
-      # add_reference("posts", "user")                                    # Adds user_id column
-      # add_reference("posts", "user", null: false, foreign_key: true)    # With NOT NULL and FK
+      # ```
+      # add_reference("posts", "user")                                 # Adds user_id column
+      # add_reference("posts", "user", null: false, foreign_key: true) # With NOT NULL and FK
       # add_reference("posts", "author", to_table: "users", on_delete: :cascade)
-      # add_reference("comments", "commentable", polymorphic: true)       # Polymorphic
+      # add_reference("comments", "commentable", polymorphic: true) # Polymorphic
       # ```
       def add_reference(table : String, name : String, polymorphic : Bool = false, null : Bool = true, foreign_key : Bool = false, to_table : String? = nil, on_delete : Symbol? = nil, on_update : Symbol? = nil, index : Bool = true)
         if polymorphic
@@ -206,11 +206,11 @@ module Ralph
       #
       # ## Usage
       #
-      # ```crystal
-      # add_foreign_key("posts", "users")                              # posts.user_id -> users.id
-      # add_foreign_key("posts", "users", on_delete: :cascade)         # With CASCADE
-      # add_foreign_key("posts", "users", column: "author_id")         # Custom column
-      # add_foreign_key("posts", "users", name: "fk_post_author")      # Custom name
+      # ```
+      # add_foreign_key("posts", "users")                         # posts.user_id -> users.id
+      # add_foreign_key("posts", "users", on_delete: :cascade)    # With CASCADE
+      # add_foreign_key("posts", "users", column: "author_id")    # Custom column
+      # add_foreign_key("posts", "users", name: "fk_post_author") # Custom name
       # ```
       def add_foreign_key(from_table : String, to_table : String, column : String? = nil, primary_key : String = "id", on_delete : Symbol? = nil, on_update : Symbol? = nil, name : String? = nil)
         fk = Schema::ForeignKeyDefinition.new(
@@ -234,10 +234,10 @@ module Ralph
       #
       # ## Usage
       #
-      # ```crystal
-      # remove_foreign_key("posts", "users")                    # Drop fk_posts_user_id
+      # ```
+      # remove_foreign_key("posts", "users") # Drop fk_posts_user_id
       # remove_foreign_key("posts", "users", column: "author_id")
-      # remove_foreign_key("posts", name: "fk_post_author")     # By explicit name
+      # remove_foreign_key("posts", name: "fk_post_author") # By explicit name
       # ```
       def remove_foreign_key(from_table : String, to_table : String? = nil, column : String? = nil, name : String? = nil)
         constraint_name = name || begin
@@ -252,7 +252,7 @@ module Ralph
       #
       # ## Usage
       #
-      # ```crystal
+      # ```
       # rename_table("old_users", "users")
       # ```
       def rename_table(old_name : String, new_name : String)
@@ -269,7 +269,7 @@ module Ralph
       #
       # ## Usage
       #
-      # ```crystal
+      # ```
       # change_column("users", "age", type: :bigint)
       # change_column("users", "name", null: false)
       # change_column("users", "status", default: "active")
