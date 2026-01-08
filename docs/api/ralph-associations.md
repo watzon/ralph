@@ -47,7 +47,7 @@ end
 
 ### `.counter_cache_registry`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L123)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L124)*
 
 Get the counter cache registry
 
@@ -55,23 +55,24 @@ Get the counter cache registry
 
 ### `.counter_caches_for(child_class : String) : Array(NamedTuple(parent_class: String, association_name: String, counter_column: String, foreign_key: String)) | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L152)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L155)*
 
 Get counter caches for a child class
 
 ---
 
-### `.find_polymorphic(class_name : String, id : Int64) : Ralph::Model | Nil`
+### `.find_polymorphic(class_name : String, id_str : String) : Ralph::Model | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L139)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L142)*
 
-Lookup and find a polymorphic record by class name and id
+Lookup and find a polymorphic record by class name and id (as string)
+The id is passed as a string to support flexible primary key types
 
 ---
 
 ### `.polymorphic_registry`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L118)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L119)*
 
 Get the polymorphic registry
 
@@ -79,24 +80,25 @@ Get the polymorphic registry
 
 ### `.register_counter_cache(child_class : String, parent_class : String, association_name : String, counter_column : String, foreign_key : String)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L146)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L149)*
 
 Register a counter cache relationship
 
 ---
 
-### `.register_polymorphic_type(class_name : String, finder : Proc(Int64, Ralph::Model | Nil))`
+### `.register_polymorphic_type(class_name : String, finder : Proc(String, Ralph::Model | Nil))`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L134)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L136)*
 
 Register a model class for polymorphic lookup
 This is called at runtime when models with `as:` option are loaded
+Uses String for flexible primary key type support (Int64, UUID, String, etc.)
 
 ---
 
 ### `.register_touch(child_class : String, parent_class : String, association_name : String, touch_column : String, foreign_key : String)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L157)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L160)*
 
 Register a touch relationship
 
@@ -104,7 +106,7 @@ Register a touch relationship
 
 ### `.touch_registry`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L128)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L129)*
 
 Get the touch registry
 
@@ -112,7 +114,7 @@ Get the touch registry
 
 ### `.touches_for(child_class : String) : Array(NamedTuple(parent_class: String, association_name: String, touch_column: String, foreign_key: String)) | Nil`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L163)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L166)*
 
 Get touch relationships for a child class
 
@@ -122,7 +124,7 @@ Get touch relationships for a child class
 
 ### `.belongs_to(name, **options)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L192)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L195)*
 
 Define a belongs_to association
 
@@ -138,23 +140,23 @@ Options:
 - optional: If true, the foreign key can be nil (default: false)
 
 Usage:
-```crystal
+```
 belongs_to user
 belongs_to author, class_name: "User"
 belongs_to author, class_name: "User", foreign_key: "writer_id"
 belongs_to author, class_name: "User", primary_key: "uuid"
-belongs_to commentable, polymorphic: true  # Creates commentable_id and commentable_type columns
-belongs_to user, touch: true               # Updates user.updated_at on save
-belongs_to user, touch: :last_post_at      # Updates user.last_post_at on save
-belongs_to publisher, counter_cache: true  # Maintains publisher.books_count (inferred from child table)
-belongs_to publisher, counter_cache: "total_books"  # Uses custom column name
+belongs_to commentable, polymorphic: true          # Creates commentable_id and commentable_type columns
+belongs_to user, touch: true                       # Updates user.updated_at on save
+belongs_to user, touch: :last_post_at              # Updates user.last_post_at on save
+belongs_to publisher, counter_cache: true          # Maintains publisher.books_count (inferred from child table)
+belongs_to publisher, counter_cache: "total_books" # Uses custom column name
 ```
 
 ---
 
 ### `.has_many(name, scope_block = nil, **options)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L942)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L963)*
 
 Define a has_many association
 
@@ -176,22 +178,22 @@ Note: For counter caching, use `counter_cache: true` on the `belongs_to` side of
 This automatically generates increment/decrement/update callbacks on the child model.
 
 Usage:
-```crystal
+```
 has_many posts
 has_many articles, class_name: "BlogPost"
 has_many articles, class_name: "BlogPost", foreign_key: "writer_id"
 has_many posts, dependent: :destroy
 has_many posts, dependent: :delete_all
-has_many comments, as: :commentable  # Polymorphic association
-has_many tags, through: :post_tags   # Through association
-has_many tags, through: :post_tags, source: :tag  # Through with custom source
+has_many comments, as: :commentable              # Polymorphic association
+has_many tags, through: :post_tags               # Through association
+has_many tags, through: :post_tags, source: :tag # Through with custom source
 ```
 
 ---
 
 ### `.has_one(name, **options)`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L578)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L596)*
 
 Define a has_one association
 
@@ -208,12 +210,12 @@ Options:
   - :restrict_with_exception - Prevent destruction if associations exist (raises exception)
 
 Usage:
-```crystal
+```
 has_one profile
 has_one avatar, class_name: "UserAvatar"
 has_one avatar, class_name: "UserAvatar", foreign_key: "owner_id"
 has_one profile, dependent: :destroy
-has_one profile, as: :profileable  # Polymorphic association
+has_one profile, as: :profileable # Polymorphic association
 ```
 
 ---

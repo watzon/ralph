@@ -40,6 +40,30 @@ Ralph::Database::SqliteBackend.new("sqlite3://./db/development.sqlite3")
 Ralph::Database::SqliteBackend.new("sqlite3::memory:")
 ```
 
+#### WAL Mode
+
+SQLite supports Write-Ahead Logging (WAL) mode, which improves concurrency by allowing readers to proceed while a write is in progress. This is especially beneficial for production applications with concurrent requests.
+
+```crystal
+# Enable WAL mode for better concurrency
+Ralph::Database::SqliteBackend.new("sqlite3://./db/production.sqlite3", wal_mode: true)
+
+# With custom busy timeout (milliseconds)
+Ralph::Database::SqliteBackend.new("sqlite3://./db/production.sqlite3", wal_mode: true, busy_timeout: 10000)
+```
+
+**When to use WAL mode:**
+- Production environments with concurrent reads and writes
+- Applications requiring better read/write performance
+- Multi-threaded web servers
+
+**Trade-offs:**
+- Creates additional files (`.sqlite3-wal`, `.sqlite3-shm`)
+- Not supported for in-memory databases
+- Slightly different file locking behavior
+
+**Default behavior:** Without `wal_mode: true`, Ralph uses a mutex to serialize all write operations from the application, which prevents "database is locked" errors but limits write throughput.
+
 ### PostgresBackend
 
 The `PostgresBackend` allows you to connect to a PostgreSQL database.

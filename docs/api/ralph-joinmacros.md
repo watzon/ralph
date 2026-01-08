@@ -2,7 +2,7 @@
 
 `module`
 
-*Defined in [src/ralph/associations.cr:1484](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L1484)*
+*Defined in [src/ralph/associations.cr:1514](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L1514)*
 
 Join macros - generate join methods for associations
 
@@ -24,7 +24,7 @@ User.query.join_posts.where("posts.published = ?", true)
 
 ### `.generate_join_methods`
 
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L1486)*
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/associations.cr#L1516)*
 
 Generate join methods for all associations defined in the class
 

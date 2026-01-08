@@ -12,6 +12,7 @@ Complete API documentation for Ralph, auto-generated from source code.
 ## Classes
 
 - [`AssociationMetadata`](ralph-associationmetadata.md) - <p>Association metadata storage</p>
+- [`BackendError`](ralph-backenderror.md) - <p>Exception raised when attempting to use backend-specific features on an unsupported backend</p>
 - [`ColumnMetadata`](ralph-columnmetadata.md) - <p>Metadata about a column</p>
 - [`DeleteRestrictionError`](ralph-deleterestrictionerror.md) - <p>Exception raised when trying to destroy a record with dependent: :restrict_with_exception</p>
 - [`Model`](ralph-model.md) - <p>Base class for all ORM models</p>

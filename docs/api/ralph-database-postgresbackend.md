@@ -56,6 +56,35 @@ backend = Ralph::Database::PostgresBackend.new("postgres://localhost/mydb")
 
 ## Instance Methods
 
+### `#available_text_search_configs`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L164)*
+
+Get all available text search configurations
+
+Returns a list of available text search configuration names that can be
+used with full-text search functions like to_tsvector() and to_tsquery().
+
+## Example
+
+```
+backend = Ralph::Database::PostgresBackend.new(url)
+configs = backend.available_text_search_configs
+# => ["arabic", "danish", "dutch", "english", "finnish", "french", "german", ...]
+```
+
+## Common Configurations
+
+- **simple**: No stemming, just lowercasing and removing stop words
+- **english**: English language with stemming and stop words
+- **french**: French language configuration
+- **german**: German language configuration
+- **spanish**: Spanish language configuration
+- **russian**: Russian language configuration
+- And many more...
+
+---
+
 ### `#begin_transaction_sql`
 
 *[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L110)*
@@ -88,6 +117,37 @@ SQL to commit a transaction
 
 ---
 
+### `#create_extension(name : String, if_not_exists : Bool = true)`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L306)*
+
+Install a PostgreSQL extension
+
+## Example
+
+```
+backend.create_extension("pg_trgm")
+```
+
+---
+
+### `#create_text_search_config(name : String, copy_from : String = "english")`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L225)*
+
+Create a custom text search configuration
+
+Creates a new text search configuration by copying from an existing one.
+
+## Example
+
+```
+# Create a custom config based on English
+backend.create_text_search_config("my_english", copy_from: "english")
+```
+
+---
+
 ### `#dialect`
 
 *[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L134)*
@@ -97,11 +157,56 @@ Used by migrations and schema generation
 
 ---
 
+### `#drop_extension(name : String, if_exists : Bool = true, cascade : Bool = false)`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L312)*
+
+Uninstall a PostgreSQL extension
+
+---
+
+### `#drop_text_search_config(name : String, if_exists : Bool = true)`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L236)*
+
+Drop a custom text search configuration
+
+## Example
+
+```
+backend.drop_text_search_config("my_english")
+```
+
+---
+
 ### `#execute(query : String, args : Array(DB::Any) = [] of DB::Any)`
 
 *[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L54)*
 
 Execute a query and return the raw result
+
+---
+
+### `#extension_available?(name : String) : Bool`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L274)*
+
+Check if a PostgreSQL extension is available
+
+## Example
+
+```
+backend.extension_available?("pg_trgm") # => true
+backend.extension_available?("postgis") # => false (if not installed)
+```
+
+---
+
+### `#extension_installed?(name : String) : Bool`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L287)*
+
+Check if a PostgreSQL extension is installed
 
 ---
 
@@ -114,6 +219,23 @@ Execute a query and return the last inserted ID
 Implementation note: Different backends handle this differently:
 - SQLite: Uses `SELECT last_insert_rowid()` after INSERT
 - PostgreSQL: Uses `INSERT ... RETURNING id`
+
+---
+
+### `#postgres_version`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L251)*
+
+Get PostgreSQL version
+
+Returns the PostgreSQL server version as a string.
+
+## Example
+
+```
+backend.postgres_version
+# => "15.4"
+```
 
 ---
 
@@ -173,6 +295,31 @@ Execute a query and return a single scalar value (first column of first row)
 
 ---
 
+### `#text_search_config_exists?(config_name : String) : Bool`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L205)*
+
+Check if a text search configuration exists
+
+---
+
+### `#text_search_config_info(config_name : String) : Hash(String, String)`
+
+*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L185)*
+
+Get text search configuration details
+
+Returns information about a specific text search configuration.
+
+## Example
+
+```
+backend.text_search_config_info("english")
+# => {name: "english", parser: "default", dictionaries: [...]}
+```
+
+---
+
 ### `#transaction`
 
 *[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L91)*
@@ -180,217 +327,4 @@ Execute a query and return a single scalar value (first column of first row)
 Begin a transaction
 
 ---
-
-## PostgreSQL-Specific Helper Methods
-
-### Text Search Configuration
-
-#### `#available_text_search_configs : Array(String)`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L164)*
-
-List all available text search configurations on the server.
-
-Common configurations: 'english', 'simple', 'french', 'german', 'spanish', 'russian', and many more.
-
-```crystal
-backend = Ralph.settings.database.as(Ralph::Database::PostgresBackend)
-configs = backend.available_text_search_configs
-# => ["danish", "dutch", "english", "finnish", "french", ...]
-```
-
----
-
-#### `#text_search_config_info(config_name : String) : Hash(String, String)`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L185)*
-
-Get detailed information about a specific text search configuration.
-
-Returns a hash with keys: `name`, `parser`, `schema`
-
-```crystal
-backend.text_search_config_info("english")
-# => {
-#   "name" => "english",
-#   "parser" => "default",
-#   "schema" => "pg_catalog"
-# }
-```
-
----
-
-#### `#text_search_config_exists?(config_name : String) : Bool`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L205)*
-
-Check if a text search configuration exists.
-
-```crystal
-backend.text_search_config_exists?("english")   # => true
-backend.text_search_config_exists?("nonexistent") # => false
-```
-
----
-
-#### `#create_text_search_config(name : String, copy_from : String = "english")`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L225)*
-
-Create a custom text search configuration by copying from an existing one.
-
-Useful for custom dictionaries or language-specific tokenization.
-
-```crystal
-# Create custom English config
-backend.create_text_search_config("my_english", copy_from: "english")
-
-# Now can be used in queries
-Article.query { |q|
-  q.where_search("content", "programming", config: "my_english")
-}
-```
-
----
-
-#### `#drop_text_search_config(name : String, if_exists : Bool = true)`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L236)*
-
-Drop a custom text search configuration.
-
-```crystal
-backend.drop_text_search_config("my_english")
-
-# With if_exists to avoid errors
-backend.drop_text_search_config("nonexistent", if_exists: true)
-```
-
----
-
-### PostgreSQL Server Information
-
-#### `#postgres_version : String`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L251)*
-
-Get the PostgreSQL server version.
-
-Returns version as a string (e.g., "15.4", "14.2", "13.10").
-
-```crystal
-backend = Ralph.settings.database.as(Ralph::Database::PostgresBackend)
-version = backend.postgres_version
-# => "15.4"
-```
-
-Useful for feature detection:
-
-```crystal
-if backend.postgres_version.starts_with?("15") || backend.postgres_version.starts_with?("14")
-  # Use PostgreSQL 14+ specific features
-end
-```
-
----
-
-### PostgreSQL Extensions
-
-#### `#extension_available?(name : String) : Bool`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L274)*
-
-Check if a PostgreSQL extension is available for installation on the server.
-
-```crystal
-backend.extension_available?("pg_trgm")      # => true (usually available)
-backend.extension_available?("postgis")      # => false (if not installed)
-backend.extension_available?("uuid-ossp")    # => true
-```
-
----
-
-#### `#extension_installed?(name : String) : Bool`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L287)*
-
-Check if a PostgreSQL extension is already installed in the database.
-
-```crystal
-backend.extension_installed?("pg_trgm")      # => true (if installed)
-backend.extension_installed?("postgis")      # => false
-```
-
----
-
-#### `#create_extension(name : String, if_not_exists : Bool = true)`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L306)*
-
-Install a PostgreSQL extension.
-
-Requires superuser or appropriate permissions.
-
-```crystal
-# Install extension
-backend.create_extension("pg_trgm")
-
-# With if_not_exists (default) to avoid errors
-backend.create_extension("uuid-ossp", if_not_exists: true)
-```
-
-Common useful extensions:
-- `pg_trgm` - Trigram matching for fuzzy text search
-- `uuid-ossp` - Additional UUID generation functions
-- `pgcrypto` - Cryptographic functions
-- `postgis` - Geographic data types and functions
-- `hstore` - Key-value data type
-
----
-
-#### `#drop_extension(name : String, if_exists : Bool = true, cascade : Bool = false)`
-
-*[View source](https://github.com/watzon/ralph/blob/main/src/ralph/backends/postgres.cr#L312)*
-
-Uninstall a PostgreSQL extension.
-
-```crystal
-# Drop extension safely
-backend.drop_extension("pg_trgm", if_exists: true)
-
-# Drop with cascade to remove dependent objects
-backend.drop_extension("uuid-ossp", cascade: true)
-```
-
-**Parameters:**
-- `name` - Extension name
-- `if_exists` - Don't error if extension doesn't exist (default: true)
-- `cascade` - Drop dependent objects (default: false)
-
----
-
-## PostgreSQL Feature Detection Example
-
-```crystal
-backend = Ralph.settings.database.as(Ralph::Database::PostgresBackend)
-
-# Check version for feature support
-version = backend.postgres_version.split('.')[0].to_i
-if version >= 11
-  # Use websearch (available in PostgreSQL 11+)
-  Article.query { |q|
-    q.where_websearch("content", "crystal -ruby \"web framework\"")
-  }
-end
-
-# Check extension availability
-if backend.extension_available?("pg_trgm")
-  # Can use trigram-based fuzzy search
-  backend.create_extension("pg_trgm") unless backend.extension_installed?("pg_trgm")
-end
-
-# List available text search configs
-configs = backend.available_text_search_configs
-puts "Available text search configs: #{configs.join(', ')}"
-```
 
