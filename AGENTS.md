@@ -295,14 +295,47 @@ ralph g:model N F:T   # Generate model with fields
 ## TESTING
 
 ```bash
-# Default: SQLite (in-memory, fast)
+# Default: Run all specs EXCEPT docs (fast, ~1-2 seconds)
+crystal spec --tag "~docs"
+
+# Run ALL specs including documentation validation (slow, compiles each code block)
 crystal spec
+
+# Run only documentation specs
+crystal spec spec/docs/
 
 # PostgreSQL integration
 DB_ADAPTER=postgres POSTGRES_URL=postgres://postgres@localhost:5432/ralph_test crystal spec spec/ralph/integration/
 ```
 
-Test helpers:
+### Testing Strategy
+
+**For normal development**: Use `crystal spec --tag "~docs"` to skip documentation validation specs. These are slow because they extract and compile every Crystal code block from markdown files.
+
+**When to run docs specs**: Only run documentation specs (`crystal spec spec/docs/`) when:
+- You've modified markdown files in `docs/` that contain Crystal code blocks
+- You've changed macro syntax that might break documentation examples
+- Before releasing a new version
+
+### Documentation Code Block Validation
+
+The `spec/docs/` directory contains infrastructure for validating that Crystal code examples in documentation actually compile:
+
+- `code_block_validator.cr` - Parses markdown, extracts Crystal blocks, wraps with imports
+- `documentation_spec.cr` - Runs compilation check on each block (tagged with `docs`)
+
+To skip compilation checking on a code block (e.g., for illustrative snippets that aren't standalone):
+```markdown
+```crystal compile=false
+# This code won't be validated
+create_table :example do |t|
+  t.string :name
+end
+```                           
+```
+
+### Test Helpers
+
 - `RalphTestHelper.setup_test_database` - Creates users/posts tables
 - `RalphTestHelper.cleanup_test_database` - Truncates/drops for isolation
 - `TestSchema` module - Table creation/truncation utilities

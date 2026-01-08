@@ -6,7 +6,7 @@ The Schema Builder provides a fluent DSL for defining and modifying your databas
 
 Use `create_table` to define a new table. Inside the block, you define the columns and indexes.
 
-```crystal
+```crystal compile=false
 create_table :products do |t|
   t.primary_key             # Adds 'id' INTEGER PRIMARY KEY
   t.string :name, size: 100, null: false
@@ -70,7 +70,7 @@ All column methods accept an optional set of options:
 - `size: Int32` - Specify the size for `string` (VARCHAR) columns.
 - `precision: Int32` and `scale: Int32` - Specify dimensions for `decimal` columns.
 
-```crystal
+```crystal compile=false
 t.string :status, null: false, default: "draft", size: 50
 ```
 
@@ -78,7 +78,7 @@ t.string :status, null: false, default: "draft", size: 50
 
 Use `reference` (or its aliases `references` and `belongs_to`) to create foreign key columns.
 
-```crystal
+```crystal compile=false
 create_table :comments do |t|
   t.references :user        # Adds 'user_id' BIGINT and an index
   t.references :post        # Adds 'post_id' BIGINT and an index
@@ -97,14 +97,14 @@ You can also modify tables after they've been created.
 
 ### Adding Columns
 
-```crystal
+```crystal compile=false
 add_column :users, :bio, :text
 add_column :users, :points, :integer, default: 0
 ```
 
 ### Removing Columns
 
-```crystal
+```crystal compile=false
 remove_column :users, :bio
 ```
 
@@ -112,13 +112,13 @@ _Note: In SQLite, removing a column is supported in modern versions, but older o
 
 ### Renaming Columns
 
-```crystal
+```crystal compile=false
 rename_column :users, :points, :karma
 ```
 
 ### References
 
-```crystal
+```crystal compile=false
 add_reference :posts, :author             # Adds author_id
 remove_reference :posts, :author          # Removes author_id
 ```
@@ -129,7 +129,7 @@ Indexes improve query performance but can slow down writes. Use them for columns
 
 ### Creating Indexes
 
-```crystal
+```crystal compile=false
 # Inside create_table
 t.index :email, unique: true
 
@@ -140,7 +140,7 @@ add_index :users, :email, unique: true, name: "idx_user_emails"
 
 ### Removing Indexes
 
-```crystal
+```crystal compile=false
 remove_index :users, :last_name
 remove_index :users, name: "idx_user_emails"
 ```
@@ -151,7 +151,7 @@ remove_index :users, name: "idx_user_emails"
 
 Use JSON for storing structured data that doesn't fit a fixed schema:
 
-```crystal
+```crystal compile=false
 create_table :posts do |t|
   t.primary_key
   t.string :title, null: false
@@ -173,7 +173,7 @@ add_index :posts, :settings, using: :gin  # PostgreSQL only
 
 UUIDs are ideal for distributed systems and API keys:
 
-```crystal
+```crystal compile=false
 create_table :users do |t|
   # UUID primary key
   t.uuid :id, primary: true
@@ -192,7 +192,7 @@ end
 
 Store enumerated values with database-level validation:
 
-```crystal
+```crystal compile=false
 create_table :orders do |t|
   t.primary_key
   
@@ -213,7 +213,7 @@ end
 
 Store homogeneous arrays with element type safety:
 
-```crystal
+```crystal compile=false
 create_table :articles do |t|
   t.primary_key
   t.string :title, null: false
@@ -286,7 +286,7 @@ end
 
 ### JSON Columns
 
-```crystal
+```crystal compile=false
 # Add JSON column
 add_column :posts, :metadata, :json, default: "{}"
 
@@ -299,7 +299,7 @@ add_column :articles, :config, :jsonb, null: false, default: "{}"
 
 ### UUID Columns
 
-```crystal
+```crystal compile=false
 # Add UUID column
 add_column :users, :api_key, :uuid
 
@@ -316,7 +316,7 @@ end
 
 ### Enum Columns
 
-```crystal
+```crystal compile=false
 # Add enum with string storage
 add_column :users, :role, :enum, values: ["user", "admin", "moderator"]
 
@@ -331,7 +331,7 @@ add_column :posts, :visibility, :enum,
 
 ### Array Columns
 
-```crystal
+```crystal compile=false
 # Add string array
 add_column :posts, :tags, :string_array, default: "[]"
 
@@ -351,7 +351,7 @@ add_column :data, :values, :array, element_type: :float
 
 PostgreSQL provides native support for advanced types with full indexing:
 
-```crystal
+```crystal compile=false
 create_table :analytics do |t|
   t.primary_key
   t.jsonb :event_data
@@ -372,7 +372,7 @@ add_index :analytics, :session_id
 
 SQLite stores advanced types as TEXT with validation constraints:
 
-```crystal
+```crystal compile=false
 # Same migration works on SQLite
 create_table :analytics do |t|
   t.primary_key
@@ -398,7 +398,7 @@ General Inverted Indexes are excellent for JSONB, array, and full-text search co
 
 #### In Table Definition
 
-```crystal
+```crystal compile=false
 create_table :posts do |t|
   t.primary_key
   t.string :title
@@ -416,7 +416,7 @@ end
 
 #### Standalone Index Creation
 
-```crystal
+```crystal compile=false
 # Add GIN index to existing table
 add_gin_index :posts, :metadata
 
@@ -432,7 +432,7 @@ Generalized Search Tree indexes support range types, geometric types, and specia
 
 #### In Table Definition
 
-```crystal
+```crystal compile=false
 create_table :places do |t|
   t.primary_key
   t.string :name
@@ -449,7 +449,7 @@ end
 
 #### Standalone Operations
 
-```crystal
+```crystal compile=false
 # Add GiST index
 add_gist_index :places, :location
 
@@ -465,7 +465,7 @@ Dedicated indexes for PostgreSQL full-text search operations.
 
 #### Single Column
 
-```crystal
+```crystal compile=false
 create_table :articles do |t|
   t.primary_key
   t.string :title
@@ -480,7 +480,7 @@ end
 
 #### Multi-Column
 
-```crystal
+```crystal compile=false
 create_table :documents do |t|
   t.primary_key
   t.string :title
@@ -496,7 +496,7 @@ end
 
 #### Standalone Operations
 
-```crystal
+```crystal compile=false
 # Add full-text index
 add_full_text_index :articles, :content, config: "english"
 
@@ -517,7 +517,7 @@ Conditional indexes that only index rows matching a condition, reducing index si
 
 #### In Table Definition
 
-```crystal
+```crystal compile=false
 create_table :users do |t|
   t.primary_key
   t.string :email
@@ -536,7 +536,7 @@ end
 
 #### Standalone Operations
 
-```crystal
+```crystal compile=false
 # Add partial index
 add_partial_index :users, :email, condition: "active = true", unique: true
 
@@ -555,7 +555,7 @@ Indexes on computed expressions rather than raw columns, useful for case-insensi
 
 #### In Table Definition
 
-```crystal
+```crystal compile=false
 create_table :users do |t|
   t.primary_key
   t.string :email
@@ -572,7 +572,7 @@ end
 
 #### Standalone Operations
 
-```crystal
+```crystal compile=false
 # Add expression index for case-insensitive search
 add_expression_index :users, "lower(email)", unique: true
 
