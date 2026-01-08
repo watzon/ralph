@@ -1633,6 +1633,8 @@ module Ralph
           if name == {{ivar.name.stringify}}
             val = @{{ivar.name}}
             return val.as(DB::Any?) if val.nil? || val.is_a?(DB::Any)
+            # Handle UUID by converting to string (UUID is stored as CHAR(36) in SQLite)
+            return val.to_s if val.is_a?(UUID)
             return nil
           end
         {% end %}

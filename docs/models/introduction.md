@@ -113,7 +113,7 @@ class Team < Ralph::Model
 end
 ```
 
-> **Note:** Polymorphic associations currently require `Int64` primary keys on parent models due to the need to store a single FK column type that works across multiple parent types.
+> **Note:** Polymorphic associations store foreign key IDs as strings to support any primary key type (`Int64`, `String`, `UUID`, etc.). This provides maximum flexibility while maintaining type safety through the registry-based lookup system.
 
 ## Column Name Conversion
 

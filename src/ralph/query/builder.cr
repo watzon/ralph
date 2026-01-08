@@ -429,7 +429,15 @@ module Ralph
 
       # Add a WHERE clause (returns new Builder)
       def where(clause : String, *args) : Builder
-        converted = args.to_a.map { |a| a.as(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil) }
+        # Convert UUID to string since DB layer doesn't support UUID directly
+        converted = args.to_a.map do |a|
+          case a
+          when UUID
+            a.to_s.as(DBValue)
+          else
+            a.as(DBValue)
+          end
+        end
         with_wheres(@wheres + [WhereClause.new(clause, converted)])
       end
 

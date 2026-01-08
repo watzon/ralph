@@ -122,10 +122,12 @@ module Ralph
       def add_reference(table : String, name : String, polymorphic : Bool = false, null : Bool = true, foreign_key : Bool = false, to_table : String? = nil, on_delete : Symbol? = nil, on_update : Symbol? = nil, index : Bool = true)
         if polymorphic
           # Add both ID and type columns
+          # Polymorphic IDs are stored as strings to support any primary key type
+          # (Int64, String, UUID, etc.)
           id_col = "#{name}_id"
           type_col = "#{name}_type"
 
-          add_column(table, id_col, :bigint, null: null)
+          add_column(table, id_col, :string, null: null)
           add_column(table, type_col, :string, null: null)
           add_index(table, id_col, name: "index_#{table}_on_#{id_col}") if index
         else

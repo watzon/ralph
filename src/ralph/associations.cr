@@ -302,10 +302,10 @@ module Ralph
 
       {% if is_polymorphic %}
         # Polymorphic belongs_to: define both ID and type columns
-        # Note: Polymorphic associations use Int64 for the FK since the parent type
-        # is not known at compile time. For non-Int64 primary keys with polymorphic
-        # associations, custom handling may be needed.
-        column {{foreign_key}}, Int64?
+        # Note: Polymorphic associations store the FK as String to support any
+        # primary key type (Int64, String, UUID, etc.). The ID is converted to
+        # string at storage and resolved back to the correct type via find_by.
+        column {{foreign_key}}, String?
         column {{type_column}}, String?
 
         # Polymorphic getter - returns the associated record (any model type)
@@ -323,8 +323,8 @@ module Ralph
 
           return nil if foreign_key_value.nil? || type_value.nil?
 
-          # Use the polymorphic registry to find the record (convert Int64 to String for lookup)
-          Ralph::Associations.find_polymorphic(type_value.not_nil!, foreign_key_value.not_nil!.to_s)
+          # Use the polymorphic registry to find the record
+          Ralph::Associations.find_polymorphic(type_value.not_nil!, foreign_key_value.not_nil!)
         end
 
         # Polymorphic setter - accepts any Ralph::Model
@@ -334,13 +334,9 @@ module Ralph
 
           if record
             @{{type_column}} = record.class.to_s
-            # Get PK and convert to Int64 (polymorphic assumes Int64 PKs)
+            # Get PK and convert to String (works for Int64, String, UUID, etc.)
             pk = record._get_attribute(record.class.primary_key)
-            if pk.is_a?(Int64)
-              @{{foreign_key}} = pk
-            elsif pk.responds_to?(:to_i64)
-              @{{foreign_key}} = pk.to_i64
-            end
+            @{{foreign_key}} = pk.to_s if pk
           else
             @{{type_column}} = nil
             @{{foreign_key}} = nil
@@ -749,9 +745,10 @@ module Ralph
           type_value = {{type_str}}
 
           # Use the find_by_conditions helper
+          # Polymorphic ID column stores values as String
           conditions = {
             type_column => type_value.as(DB::Any),
-            id_column => pk_value.as(DB::Any)
+            id_column => pk_value.to_s.as(DB::Any)
           }
           {{class_name.id}}.find_by_conditions(conditions)
         end
@@ -789,13 +786,9 @@ module Ralph
         def {{name}}=(record : {{class_name.id}}?)
           if record
             record.{{poly_type_col}} = {{type_str}}
-            # Get PK and assign (polymorphic uses Int64)
+            # Get PK and convert to String (works for Int64, String, UUID, etc.)
             pk = __get_by_key_name(self.class.primary_key)
-            if pk.is_a?(Int64)
-              record.{{poly_id_col}} = pk
-            elsif pk.responds_to?(:to_i64)
-              record.{{poly_id_col}} = pk.to_i64
-            end
+            record.{{poly_id_col}} = pk.to_s if pk
             record.save
           end
         end
@@ -804,12 +797,9 @@ module Ralph
         def build_{{name}}(**attrs) : {{class_name.id}}
           record = {{class_name.id}}.new(**attrs)
           record.{{poly_type_col}} = {{type_str}}
+          # Get PK and convert to String (works for Int64, String, UUID, etc.)
           pk = __get_by_key_name(self.class.primary_key)
-          if pk.is_a?(Int64)
-            record.{{poly_id_col}} = pk
-          elsif pk.responds_to?(:to_i64)
-            record.{{poly_id_col}} = pk.to_i64
-          end
+          record.{{poly_id_col}} = pk.to_s if pk
           record
         end
 
@@ -817,12 +807,9 @@ module Ralph
         def create_{{name}}(**attrs) : {{class_name.id}}
           record = {{class_name.id}}.new(**attrs)
           record.{{poly_type_col}} = {{type_str}}
+          # Get PK and convert to String (works for Int64, String, UUID, etc.)
           pk = __get_by_key_name(self.class.primary_key)
-          if pk.is_a?(Int64)
-            record.{{poly_id_col}} = pk
-          elsif pk.responds_to?(:to_i64)
-            record.{{poly_id_col}} = pk.to_i64
-          end
+          record.{{poly_id_col}} = pk.to_s if pk
           record.save
           record
         end
@@ -1221,9 +1208,10 @@ module Ralph
 
           {% if has_scope %}
             # Build query with scope
+            # Polymorphic ID column stores values as String
             query = Ralph::Query::Builder.new({{class_name.id}}.table_name)
               .where("\"#{type_column}\" = ?", type_value)
-              .where("\"#{id_column}\" = ?", pk_value)
+              .where("\"#{id_column}\" = ?", pk_value.to_s)
 
             # Apply the scope block (must return the modified query)
             query = {{scope_block}}.call(query)
@@ -1231,9 +1219,10 @@ module Ralph
             {{class_name.id}}.find_all_with_query(query)
           {% else %}
             # Use the find_all_by_conditions helper
+            # Polymorphic ID column stores values as String
             conditions = {
               type_column => type_value.as(DB::Any),
-              id_column => pk_value.as(DB::Any)
+              id_column => pk_value.to_s.as(DB::Any)
             }
             {{class_name.id}}.find_all_by_conditions(conditions)
           {% end %}
@@ -1248,9 +1237,10 @@ module Ralph
           id_column = {{as_name}}.not_nil! + "_id"
           type_value = {{type_str}}
 
+          # Polymorphic ID column stores values as String
           conditions = {
             type_column => type_value.as(DB::Any),
-            id_column => pk_value.as(DB::Any)
+            id_column => pk_value.to_s.as(DB::Any)
           }
           {{class_name.id}}.find_all_by_conditions(conditions)
         end
@@ -1338,13 +1328,9 @@ module Ralph
           record = {{class_name.id}}.new(**attrs)
           # Set the polymorphic columns using compile-time computed names
           record.{{poly_type_col}} = {{type_str}}
-          # Get PK and assign (polymorphic uses Int64)
+          # Get PK and convert to String (works for Int64, String, UUID, etc.)
           pk = __get_by_key_name(self.class.primary_key)
-          if pk.is_a?(Int64)
-            record.{{poly_id_col}} = pk
-          elsif pk.responds_to?(:to_i64)
-            record.{{poly_id_col}} = pk.to_i64
-          end
+          record.{{poly_id_col}} = pk.to_s if pk
           record
         end
 
@@ -1353,12 +1339,9 @@ module Ralph
           record = {{class_name.id}}.new(**attrs)
           # Set the polymorphic columns using compile-time computed names
           record.{{poly_type_col}} = {{type_str}}
+          # Get PK and convert to String (works for Int64, String, UUID, etc.)
           pk = __get_by_key_name(self.class.primary_key)
-          if pk.is_a?(Int64)
-            record.{{poly_id_col}} = pk
-          elsif pk.responds_to?(:to_i64)
-            record.{{poly_id_col}} = pk.to_i64
-          end
+          record.{{poly_id_col}} = pk.to_s if pk
           record.save
           record
         end
@@ -1459,10 +1442,12 @@ module Ralph
         def self._preload_{{name}}(models : Array(self)) : Nil
           return if models.empty?
 
-          pk_values = models.compact_map(&.id).uniq
-          return if pk_values.empty?
-
           {% if is_polymorphic %}
+            # For polymorphic associations, convert IDs to strings since polymorphic
+            # FK columns store values as String (to support any primary key type)
+            pk_values = models.compact_map { |m| m.id.to_s if m.id }.uniq
+            return if pk_values.empty?
+
             type_column = {{as_name}}.not_nil! + "_type"
             id_column = {{as_name}}.not_nil! + "_id"
             model_type = {{type_str}}
@@ -1471,6 +1456,9 @@ module Ralph
               .where("\"#{type_column}\" = ?", model_type)
               .where_in(id_column, pk_values.map(&.as(Ralph::Query::DBValue)))
           {% else %}
+            pk_values = models.compact_map(&.id).uniq
+            return if pk_values.empty?
+
             query = Ralph::Query::Builder.new({{class_name.id}}.table_name)
               .where_in({{foreign_key_str}}, pk_values.map(&.as(Ralph::Query::DBValue)))
           {% end %}

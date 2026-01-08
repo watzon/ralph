@@ -110,6 +110,30 @@ module Ralph
 
       has_many tags, as: :taggable, dependent: :delete_all
     end
+
+    # ========================================
+    # Models for flexible primary key tests
+    # ========================================
+
+    # Parent with String primary key
+    class StringPKPost < Model
+      table "poly_test_string_posts"
+
+      column id, String, primary: true
+      column title, String
+
+      has_many comments, class_name: "Ralph::PolymorphicTests::Comment", as: :commentable
+    end
+
+    # Parent with UUID primary key
+    class UUIDPost < Model
+      table "poly_test_uuid_posts"
+
+      column id, UUID, primary: true
+      column title, String
+
+      has_many comments, class_name: "Ralph::PolymorphicTests::Comment", as: :commentable
+    end
   end
 
   describe "Polymorphic Associations" do
@@ -130,7 +154,8 @@ module Ralph
       TestSchema.create_table("poly_test_comments") do |t|
         t.primary_key
         t.string("body", size: 500)
-        t.bigint("commentable_id")
+        # Polymorphic ID is stored as string to support any primary key type
+        t.string("commentable_id")
         t.string("commentable_type")
       end
 
@@ -148,7 +173,8 @@ module Ralph
       TestSchema.create_table("poly_test_profiles") do |t|
         t.primary_key
         t.string("bio", size: 500)
-        t.bigint("profileable_id")
+        # Polymorphic ID is stored as string to support any primary key type
+        t.string("profileable_id")
         t.string("profileable_type")
       end
 
@@ -166,9 +192,25 @@ module Ralph
       TestSchema.create_table("poly_test_tags") do |t|
         t.primary_key
         t.string("name")
-        t.bigint("taggable_id")
+        # Polymorphic ID is stored as string to support any primary key type
+        t.string("taggable_id")
         t.string("taggable_type")
       end
+
+      # Create tables for flexible PK tests using raw SQL for non-standard PKs
+      Ralph.database.execute(<<-SQL)
+        CREATE TABLE IF NOT EXISTS poly_test_string_posts (
+          id TEXT PRIMARY KEY NOT NULL,
+          title TEXT
+        )
+      SQL
+
+      Ralph.database.execute(<<-SQL)
+        CREATE TABLE IF NOT EXISTS poly_test_uuid_posts (
+          id TEXT PRIMARY KEY NOT NULL,
+          title TEXT
+        )
+      SQL
     end
 
     after_all do
@@ -186,6 +228,8 @@ module Ralph
       Ralph.database.execute("DELETE FROM poly_test_tags")
       Ralph.database.execute("DELETE FROM poly_test_photos")
       Ralph.database.execute("DELETE FROM poly_test_videos")
+      Ralph.database.execute("DELETE FROM poly_test_string_posts")
+      Ralph.database.execute("DELETE FROM poly_test_uuid_posts")
     end
 
     describe "polymorphic belongs_to" do
@@ -247,11 +291,12 @@ module Ralph
         result.should_not be_nil
 
         rs = result.not_nil!
-        id = rs.read(Int64?)
+        # Polymorphic ID is stored as string
+        id = rs.read(String?)
         type = rs.read(String?)
         rs.close
 
-        id.should eq(post.id)
+        id.should eq(post.id.to_s)
         type.should eq("Ralph::PolymorphicTests::Post")
       end
 
@@ -261,8 +306,8 @@ module Ralph
         comment.commentable = post
         comment.save
 
-        # Verify it's set
-        comment.commentable_id.should eq(post.id)
+        # Verify it's set (polymorphic ID is stored as string)
+        comment.commentable_id.should eq(post.id.to_s)
         comment.commentable_type.should_not be_nil
 
         # Clear it
@@ -357,7 +402,8 @@ module Ralph
 
         built_comment.body.should eq("Built comment")
         built_comment.commentable_type.should eq("Ralph::PolymorphicTests::Post")
-        built_comment.commentable_id.should eq(post.id)
+        # Polymorphic ID is stored as string
+        built_comment.commentable_id.should eq(post.id.to_s)
         built_comment.new_record?.should be_true
       end
 
@@ -368,7 +414,8 @@ module Ralph
 
         created_comment.body.should eq("Created comment")
         created_comment.commentable_type.should eq("Ralph::PolymorphicTests::Post")
-        created_comment.commentable_id.should eq(post.id)
+        # Polymorphic ID is stored as string
+        created_comment.commentable_id.should eq(post.id.to_s)
         created_comment.persisted?.should be_true
 
         # Verify it's actually in the database
@@ -442,7 +489,8 @@ module Ralph
 
         built_profile.bio.should eq("Built profile")
         built_profile.profileable_type.should eq("Ralph::PolymorphicTests::User")
-        built_profile.profileable_id.should eq(user.id)
+        # Polymorphic ID is stored as string
+        built_profile.profileable_id.should eq(user.id.to_s)
         built_profile.new_record?.should be_true
       end
 
@@ -453,7 +501,8 @@ module Ralph
 
         created_profile.bio.should eq("Created profile")
         created_profile.profileable_type.should eq("Ralph::PolymorphicTests::User")
-        created_profile.profileable_id.should eq(user.id)
+        # Polymorphic ID is stored as string
+        created_profile.profileable_id.should eq(user.id.to_s)
         created_profile.persisted?.should be_true
       end
 
@@ -465,7 +514,8 @@ module Ralph
 
         profile.persisted?.should be_true
         profile.profileable_type.should eq("Ralph::PolymorphicTests::Company")
-        profile.profileable_id.should eq(company.id)
+        # Polymorphic ID is stored as string
+        profile.profileable_id.should eq(company.id.to_s)
       end
     end
 
@@ -595,6 +645,165 @@ module Ralph
 
         profile_meta.should_not be_nil
         profile_meta.not_nil!.as_name.should eq("profileable")
+      end
+    end
+
+    describe "polymorphic with flexible primary keys" do
+      # Note: String/UUID primary keys require raw SQL inserts due to the way
+      # persisted? is determined (checking if PK is set). This is a known
+      # limitation for non-auto-generated primary keys.
+
+      it "associates Comment with String primary key parent" do
+        # Create post with string ID using raw SQL
+        post_id = "post-123"
+        Ralph.database.execute(
+          "INSERT INTO poly_test_string_posts (id, title) VALUES (?, ?)",
+          args: [post_id, "String PK Post"]
+        )
+        post = PolymorphicTests::StringPKPost.find(post_id).not_nil!
+
+        # Create comment associating with it
+        comment = PolymorphicTests::Comment.new(body: "Comment for string PK")
+        comment.commentable = post
+        comment.save
+
+        # Verify association works: child -> parent
+        reloaded = PolymorphicTests::Comment.find(comment.id).not_nil!
+        reloaded.commentable.should_not be_nil
+        reloaded.commentable.not_nil!.should be_a(PolymorphicTests::StringPKPost)
+        reloaded.commentable.not_nil!.as(PolymorphicTests::StringPKPost).id.should eq("post-123")
+
+        # Verify association works: parent -> children
+        reloaded_post = PolymorphicTests::StringPKPost.find("post-123").not_nil!
+        reloaded_post.comments.size.should eq(1)
+        reloaded_post.comments[0].body.should eq("Comment for string PK")
+      end
+
+      it "associates Comment with UUID primary key parent" do
+        uuid = UUID.new("550e8400-e29b-41d4-a716-446655440000")
+        Ralph.database.execute(
+          "INSERT INTO poly_test_uuid_posts (id, title) VALUES (?, ?)",
+          args: [uuid.to_s, "UUID Post"]
+        )
+        post = PolymorphicTests::UUIDPost.find(uuid).not_nil!
+
+        comment = PolymorphicTests::Comment.new(body: "Comment for UUID PK")
+        comment.commentable = post
+        comment.save
+
+        # Verify association works: child -> parent
+        reloaded = PolymorphicTests::Comment.find(comment.id).not_nil!
+        reloaded.commentable.should_not be_nil
+        reloaded.commentable.not_nil!.should be_a(PolymorphicTests::UUIDPost)
+        reloaded.commentable.not_nil!.as(PolymorphicTests::UUIDPost).id.should eq(uuid)
+
+        # Verify association works: parent -> children
+        reloaded_post = PolymorphicTests::UUIDPost.find(uuid).not_nil!
+        reloaded_post.comments.size.should eq(1)
+        reloaded_post.comments[0].body.should eq("Comment for UUID PK")
+      end
+
+      it "handles mixed primary key types in same child table" do
+        # Create parents with different primary key types
+        int_post = PolymorphicTests::Post.create(title: "Int64 PK Post")
+
+        string_post_id = "post-456"
+        Ralph.database.execute(
+          "INSERT INTO poly_test_string_posts (id, title) VALUES (?, ?)",
+          args: [string_post_id, "String PK Post"]
+        )
+        string_post = PolymorphicTests::StringPKPost.find(string_post_id).not_nil!
+
+        uuid = UUID.new("660e8400-e29b-41d4-a716-446655440001")
+        Ralph.database.execute(
+          "INSERT INTO poly_test_uuid_posts (id, title) VALUES (?, ?)",
+          args: [uuid.to_s, "UUID PK Post"]
+        )
+        uuid_post = PolymorphicTests::UUIDPost.find(uuid).not_nil!
+
+        # Create comments for each type
+        comment1 = PolymorphicTests::Comment.new(body: "For int64 post")
+        comment1.commentable = int_post
+        comment1.save
+
+        comment2 = PolymorphicTests::Comment.new(body: "For string post")
+        comment2.commentable = string_post
+        comment2.save
+
+        comment3 = PolymorphicTests::Comment.new(body: "For UUID post")
+        comment3.commentable = uuid_post
+        comment3.save
+
+        # All comments should be loadable and associations should work
+        PolymorphicTests::Comment.all.size.should eq(3)
+
+        # Verify each association works correctly
+        reloaded1 = PolymorphicTests::Comment.find(comment1.id).not_nil!
+        reloaded1.commentable.not_nil!.should be_a(PolymorphicTests::Post)
+
+        reloaded2 = PolymorphicTests::Comment.find(comment2.id).not_nil!
+        reloaded2.commentable.not_nil!.should be_a(PolymorphicTests::StringPKPost)
+
+        reloaded3 = PolymorphicTests::Comment.find(comment3.id).not_nil!
+        reloaded3.commentable.not_nil!.should be_a(PolymorphicTests::UUIDPost)
+      end
+
+      it "builds associated records with String primary key parent" do
+        post_id = "post-for-build"
+        Ralph.database.execute(
+          "INSERT INTO poly_test_string_posts (id, title) VALUES (?, ?)",
+          args: [post_id, "Build Test"]
+        )
+        post = PolymorphicTests::StringPKPost.find(post_id).not_nil!
+
+        built_comment = post.build_comment(body: "Built for string PK")
+
+        built_comment.commentable_type.should eq("Ralph::PolymorphicTests::StringPKPost")
+        built_comment.commentable_id.should eq("post-for-build")
+        built_comment.new_record?.should be_true
+      end
+
+      it "creates associated records with UUID primary key parent" do
+        uuid = UUID.new("770e8400-e29b-41d4-a716-446655440002")
+        Ralph.database.execute(
+          "INSERT INTO poly_test_uuid_posts (id, title) VALUES (?, ?)",
+          args: [uuid.to_s, "Create Test"]
+        )
+        post = PolymorphicTests::UUIDPost.find(uuid).not_nil!
+
+        created_comment = post.create_comment(body: "Created for UUID PK")
+
+        created_comment.commentable_type.should eq("Ralph::PolymorphicTests::UUIDPost")
+        created_comment.commentable_id.should eq(uuid.to_s)
+        created_comment.persisted?.should be_true
+      end
+
+      it "stores the ID as string in database regardless of parent PK type" do
+        uuid = UUID.new("880e8400-e29b-41d4-a716-446655440003")
+        Ralph.database.execute(
+          "INSERT INTO poly_test_uuid_posts (id, title) VALUES (?, ?)",
+          args: [uuid.to_s, "Storage Test"]
+        )
+        post = PolymorphicTests::UUIDPost.find(uuid).not_nil!
+
+        comment = PolymorphicTests::Comment.new(body: "Storage test comment")
+        comment.commentable = post
+        comment.save
+
+        # Verify directly in database that ID is stored as string
+        result = Ralph.database.query_one(
+          "SELECT commentable_id, commentable_type FROM poly_test_comments WHERE id = ?",
+          args: [comment.id]
+        )
+        result.should_not be_nil
+
+        rs = result.not_nil!
+        stored_id = rs.read(String?)
+        stored_type = rs.read(String?)
+        rs.close
+
+        stored_id.should eq(uuid.to_s)
+        stored_type.should eq("Ralph::PolymorphicTests::UUIDPost")
       end
     end
   end

@@ -345,7 +345,9 @@ module Ralph
             id_col_name = "#{name}_id"
             type_col_name = "#{name}_type"
 
-            column(id_col_name, :bigint, null: null)
+            # Polymorphic IDs are stored as strings to support any primary key type
+            # (Int64, String, UUID, etc.)
+            column(id_col_name, :string, null: null)
             column(type_col_name, :string, null: null)
 
             if index
