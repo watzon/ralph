@@ -95,7 +95,25 @@ class Post < Ralph::Model
 end
 ```
 
-> **Note:** Currently, Ralph's `find` method and associations expect the primary key to be an `Int64` for best compatibility with SQLite's `rowid`.
+Ralph supports flexible primary key types including `Int64`, `Int32`, `String`, and `UUID`. When you define a primary key, Ralph automatically creates a `PrimaryKeyType` type alias that associations use for foreign key columns:
+
+```crystal
+class Organization < Ralph::Model
+  column id : String, primary: true  # Creates alias PrimaryKeyType = String
+  column name : String
+  
+  has_many :teams
+end
+
+class Team < Ralph::Model
+  column id : Int64, primary: true
+  column name : String
+  
+  belongs_to :organization  # Foreign key is String (matches Organization's PK type)
+end
+```
+
+> **Note:** Polymorphic associations currently require `Int64` primary keys on parent models due to the need to store a single FK column type that works across multiple parent types.
 
 ## Column Name Conversion
 
