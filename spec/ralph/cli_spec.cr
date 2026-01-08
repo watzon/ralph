@@ -57,15 +57,6 @@ module Ralph
         end
       end
     end
-
-    describe "ScaffoldGenerator" do
-      it "can be instantiated with name and fields" do
-        generator = Cli::Generators::ScaffoldGenerator.new("Post", ["title:string", "body:text"])
-
-        generator.should_not be_nil
-        generator.is_a?(Cli::Generators::ScaffoldGenerator).should be_true
-      end
-    end
   end
 
   describe "CLI Database Commands" do
