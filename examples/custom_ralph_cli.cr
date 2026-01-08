@@ -20,8 +20,8 @@ require "../src/ralph"
 
 # Create a custom CLI runner with your preferred paths
 Ralph::Cli::Runner.new(
-  migrations_dir: "./db/migrations",      # Where migrations are stored and read from
-  models_dir: "./src/my_app/models"       # Where models are generated
+  migrations_dir: "./db/migrations", # Where migrations are stored and read from
+  models_dir: "./src/my_app/models"  # Where models are generated
 ).run
 
 # You can also override these paths at runtime with flags:

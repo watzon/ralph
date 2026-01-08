@@ -107,7 +107,7 @@ module Ralph
     #   Post.create(title: "Hello", user_id: user.id)
     # end
     # ```
-    def self.transaction
+    def self.transaction(&)
       Ralph::Transactions.transaction_depth += 1
       db = Ralph.database
 

@@ -17,7 +17,7 @@ module Ralph
     #
     # ## Creating Custom Types
     #
-    # ```crystal
+    # ```
     # class MoneyType < Ralph::Types::BaseType
     #   def type_symbol : Symbol
     #     :money

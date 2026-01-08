@@ -5,7 +5,6 @@ module Ralph
     table "users"
     column id, Int64
     column name, String
-
   end
 end
 

@@ -38,7 +38,7 @@ module Ralph
         #
         # ## Example
         #
-        # ```crystal
+        # ```
         # create_table :users do |t|
         #   t.string :name, size: 100, null: false
         #   t.string :email, null: false, default: ""
@@ -185,7 +185,7 @@ module Ralph
         #
         # ## Example
         #
-        # ```crystal
+        # ```
         # create_table :users do |t|
         #   t.enum :status, values: ["active", "inactive", "suspended"], null: false
         #   t.enum :priority, values: ["low", "medium", "high"], storage: :integer
@@ -207,7 +207,7 @@ module Ralph
         #
         # ## Example
         #
-        # ```crystal
+        # ```
         # create_table :posts do |t|
         #   t.string_array :tags, null: false, default: "[]"
         # end
@@ -291,7 +291,7 @@ module Ralph
         #
         # ## Example
         #
-        # ```crystal
+        # ```
         # create_table :data do |t|
         #   t.array :values, element_type: :float, null: false
         # end
@@ -326,7 +326,7 @@ module Ralph
         #
         # ## Example
         #
-        # ```crystal
+        # ```
         # create_table :posts do |t|
         #   t.reference :user, null: false, on_delete: :cascade
         #   t.reference :author, to_table: :users, foreign_key: "author_id"
@@ -346,7 +346,7 @@ module Ralph
             end
           else
             col_name = foreign_key || "#{name}_id"
-            target_table = to_table || "#{name}s"  # Simple pluralization
+            target_table = to_table || "#{name}s" # Simple pluralization
             column(col_name, :bigint, null: null)
 
             if index
@@ -394,7 +394,7 @@ module Ralph
         #
         # ## Example
         #
-        # ```crystal
+        # ```
         # create_table :posts do |t|
         #   t.bigint :user_id, null: false
         #   t.foreign_key :users, on_delete: :cascade
@@ -434,10 +434,10 @@ module Ralph
           columns_sql = all_columns.join(", ")
 
           pk_constraint = if @primary_key_column && !@primary_key_sql
-                           ", PRIMARY KEY (\"#{@primary_key_column}\")"
-                         else
-                           ""
-                         end
+                            ", PRIMARY KEY (\"#{@primary_key_column}\")"
+                          else
+                            ""
+                          end
 
           "CREATE TABLE IF NOT EXISTS \"#{@name}\" (#{columns_sql}#{pk_constraint})"
         end
@@ -521,7 +521,7 @@ module Ralph
           @to_column : String = "id",
           @on_delete : Symbol? = nil,
           @on_update : Symbol? = nil,
-          @name : String? = nil
+          @name : String? = nil,
         )
         end
 
@@ -553,12 +553,12 @@ module Ralph
 
         private def action_sql(action : Symbol?) : String
           case action
-          when :cascade   then "CASCADE"
-          when :nullify   then "SET NULL"
-          when :restrict  then "RESTRICT"
-          when :no_action then "NO ACTION"
+          when :cascade     then "CASCADE"
+          when :nullify     then "SET NULL"
+          when :restrict    then "RESTRICT"
+          when :no_action   then "NO ACTION"
           when :set_default then "SET DEFAULT"
-          else "NO ACTION"
+          else                   "NO ACTION"
           end
         end
       end

@@ -28,7 +28,6 @@ module Ralph
       column updated_at, Time?
 
       has_many books
-
     end
 
     class Book < Model
@@ -72,7 +71,6 @@ module Ralph
 
       # Scoped has_many - only recent magazines
       has_many recent_magazines, ->(q : Ralph::Query::Builder) { q.where("\"year\" > ?", 2020) }, class_name: "Ralph::AssociationFeaturesTests::Magazine"
-
     end
 
     class Magazine < Model
@@ -85,7 +83,6 @@ module Ralph
       column library_id, Int64
 
       belongs_to library
-
     end
 
     # =========================================================================
@@ -100,7 +97,6 @@ module Ralph
 
       has_many enrollments
       has_many courses, through: :enrollments, source: :course
-
     end
 
     class Course < Model
@@ -111,7 +107,6 @@ module Ralph
 
       has_many enrollments
       has_many students, through: :enrollments, source: :student
-
     end
 
     class Enrollment < Model
@@ -124,7 +119,6 @@ module Ralph
 
       belongs_to student
       belongs_to course
-
     end
 
     # =========================================================================
@@ -138,7 +132,6 @@ module Ralph
       column name, String
 
       has_many articles
-
     end
 
     class Article < Model
@@ -149,7 +142,6 @@ module Ralph
       column author_id, Int64
 
       belongs_to author
-
     end
   end
 

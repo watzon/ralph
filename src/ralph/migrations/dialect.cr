@@ -34,11 +34,11 @@ module Ralph
             when :timestamp then "TIMESTAMP"
             when :datetime  then "DATETIME"
             when :binary    then "BLOB"
-            # Advanced types (emulated in SQLite)
-            when :json      then "TEXT"  # JSON stored as TEXT, validated with json_valid()
-            when :jsonb     then "TEXT"  # JSONB emulated as TEXT in SQLite
-            when :uuid      then "CHAR(36)"  # UUID stored as text
-            when :array     then "TEXT"  # Arrays stored as JSON
+              # Advanced types (emulated in SQLite)
+            when :json  then "TEXT"     # JSON stored as TEXT, validated with json_valid()
+            when :jsonb then "TEXT"     # JSONB emulated as TEXT in SQLite
+            when :uuid  then "CHAR(36)" # UUID stored as text
+            when :array then "TEXT"     # Arrays stored as JSON
             when :enum
               # Enum storage depends on options
               case options[:storage]?
@@ -78,10 +78,10 @@ module Ralph
             when :timestamp then "TIMESTAMP"
             when :datetime  then "TIMESTAMP"
             when :binary    then "BYTEA"
-            # Advanced types (native in PostgreSQL)
-            when :uuid      then "UUID"
-            when :jsonb     then "JSONB"
-            when :json      then "JSON"
+              # Advanced types (native in PostgreSQL)
+            when :uuid  then "UUID"
+            when :jsonb then "JSONB"
+            when :json  then "JSON"
             when :array
               # Array type needs element type
               element = options[:element_type]? || :text

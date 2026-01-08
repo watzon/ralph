@@ -15,7 +15,7 @@ module Ralph
           name : String,
           fields : Array(String),
           @models_dir : String = "./src/models",
-          @migrations_dir : String = "./db/migrations"
+          @migrations_dir : String = "./db/migrations",
         )
           @name = name
           @fields = fields
@@ -162,4 +162,3 @@ MIGRATION
     end
   end
 end
-

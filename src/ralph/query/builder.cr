@@ -172,11 +172,11 @@ module Ralph
 
       def to_sql : String
         join_type = case type
-                    when :inner then "INNER JOIN"
-                    when :left   then "LEFT JOIN"
-                    when :right  then "RIGHT JOIN"
-                    when :cross  then "CROSS JOIN"
-                    when :full   then "FULL OUTER JOIN"
+                    when :inner      then "INNER JOIN"
+                    when :left       then "LEFT JOIN"
+                    when :right      then "RIGHT JOIN"
+                    when :cross      then "CROSS JOIN"
+                    when :full       then "FULL OUTER JOIN"
                     when :full_outer then "FULL OUTER JOIN"
                     else
                       "#{type.to_s.upcase} JOIN"
@@ -224,16 +224,16 @@ module Ralph
     # - `:skip_locked` - Skip rows that are already locked
     class LockClause
       enum Mode
-        Update       # FOR UPDATE
-        Share        # FOR SHARE
-        NoKeyUpdate  # FOR NO KEY UPDATE (PostgreSQL)
-        KeyShare     # FOR KEY SHARE (PostgreSQL)
+        Update      # FOR UPDATE
+        Share       # FOR SHARE
+        NoKeyUpdate # FOR NO KEY UPDATE (PostgreSQL)
+        KeyShare    # FOR KEY SHARE (PostgreSQL)
       end
 
       enum Option
         None
-        Nowait      # Don't wait for lock
-        SkipLocked  # Skip locked rows
+        Nowait     # Don't wait for lock
+        SkipLocked # Skip locked rows
       end
 
       getter mode : Mode
@@ -274,8 +274,8 @@ module Ralph
     #
     # ```
     # base = Builder.new("users").where("active = ?", true)
-    # admins = base.where("role = ?", "admin")  # base is unchanged
-    # users = base.where("role = ?", "user")    # base is unchanged
+    # admins = base.where("role = ?", "admin") # base is unchanged
+    # users = base.where("role = ?", "user")   # base is unchanged
     # ```
     class Builder
       @wheres : Array(WhereClause)
@@ -378,7 +378,7 @@ module Ralph
         @windows : Array(WindowClause),
         @set_operations : Array(SetOperationClause),
         @cached : Bool,
-        @lock : LockClause?
+        @lock : LockClause?,
       )
       end
 
@@ -1252,7 +1252,7 @@ module Ralph
       #
       # ## Example
       #
-      # ```crystal
+      # ```
       # # Basic FOR UPDATE
       # User.query { |q| q.where("id = ?", 1).for_update }
       # # => SELECT * FROM "users" WHERE id = $1 FOR UPDATE
@@ -1287,7 +1287,7 @@ module Ralph
       #
       # ## Example
       #
-      # ```crystal
+      # ```
       # # Basic FOR SHARE
       # User.query { |q| q.where("id = ?", 1).for_share }
       # # => SELECT * FROM "users" WHERE id = $1 FOR SHARE
@@ -1323,7 +1323,7 @@ module Ralph
       #
       # ## Example
       #
-      # ```crystal
+      # ```
       # # FOR UPDATE with specific tables
       # query.lock(:update, tables: ["users", "orders"])
       # # => SELECT ... FOR UPDATE OF "users", "orders"
@@ -1360,7 +1360,7 @@ module Ralph
       #
       # ## Example
       #
-      # ```crystal
+      # ```
       # query.lock_raw("FOR UPDATE OF users NOWAIT")
       # # => SELECT ... FOR UPDATE OF users NOWAIT
       # ```
@@ -1429,10 +1429,10 @@ module Ralph
 
         # Build SELECT clause with DISTINCT if specified
         distinct_clause = if @distinct && @distinct_columns.empty?
-          "DISTINCT "
-        else
-          ""
-        end
+                            "DISTINCT "
+                          else
+                            ""
+                          end
 
         select_clause = @selects.empty? ? "*" : @selects.map { |c| quote_column(c) }.join(", ")
 

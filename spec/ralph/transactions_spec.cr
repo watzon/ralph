@@ -11,7 +11,6 @@ module Ralph
       column id, Int64, primary: true
       column name, String
       column email, String?
-
     end
 
     class Post < Model
@@ -20,7 +19,6 @@ module Ralph
       column id, Int64, primary: true
       column title, String
       column user_id, Int64?
-
     end
   end
 

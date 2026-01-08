@@ -7,13 +7,13 @@ module Ralph
     #
     # ## Example
     #
-    # ```crystal
+    # ```
     # error = ValidationError.new(:blank)
-    # error.message  # => "can't be blank"
+    # error.message # => "can't be blank"
     #
     # error = ValidationError.new(:too_short, count: 3)
-    # error.message  # => "is too short (minimum is 3 characters)"
-    # error.options  # => {count: 3}
+    # error.message # => "is too short (minimum is 3 characters)"
+    # error.options # => {count: 3}
     # ```
     class ValidationError
       # The error code (e.g., :blank, :too_short, :invalid)
@@ -105,14 +105,14 @@ module Ralph
     #
     # ## Basic Usage
     #
-    # ```crystal
+    # ```
     # errors = Errors.new
     # errors.add("name", "can't be blank")
     # errors.add("email", :taken)
     # errors.add("password", :too_short, count: 8)
     #
-    # errors.full_messages  # => ["name can't be blank", "email has already been taken", "password is too short (minimum is 8 characters)"]
-    # errors.details        # => {"name" => [{error: :blank}], "email" => [{error: :taken}], ...}
+    # errors.full_messages # => ["name can't be blank", "email has already been taken", "password is too short (minimum is 8 characters)"]
+    # errors.details       # => {"name" => [{error: :blank}], "email" => [{error: :taken}], ...}
     # ```
     class Errors
       @errors : Hash(String, Array(ValidationError))
@@ -189,7 +189,7 @@ module Ralph
       #
       # ## Example
       #
-      # ```crystal
+      # ```
       # errors.add("name", :blank)
       # errors.add("password", :too_short, count: 8)
       #

@@ -72,11 +72,25 @@ module Ralph
     @@book2 : Book?
     @@book3 : Book?
 
-    def self.publisher1; @@publisher1; end
-    def self.publisher2; @@publisher2; end
-    def self.book1; @@book1; end
-    def self.book2; @@book2; end
-    def self.book3; @@book3; end
+    def self.publisher1
+      @@publisher1
+    end
+
+    def self.publisher2
+      @@publisher2
+    end
+
+    def self.book1
+      @@book1
+    end
+
+    def self.book2
+      @@book2
+    end
+
+    def self.book3
+      @@book3
+    end
 
     def self.setup_test_data
       # Create publishers

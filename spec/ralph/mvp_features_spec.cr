@@ -10,7 +10,6 @@ module Ralph
     column name, String
     column email, String
     column age, Int32 | Nil
-
   end
 
   # Test model with default values defined
@@ -21,7 +20,6 @@ module Ralph
     column name, String, default: "Anonymous"
     column email, String, default: "anonymous@example.com"
     column age, Int32 | Nil, default: 18
-
   end
 
   # Test model for conditional callbacks
@@ -65,7 +63,6 @@ module Ralph
     def log_before_create_if_active
       @_conditional_callback_log << "before_create_if_active"
     end
-
   end
 
   describe "Default Values" do
@@ -102,8 +99,8 @@ module Ralph
     it "uses provided value for some columns and defaults for others" do
       model = ModelWithDefaults.new(name: "Bob")
       model.name.should eq("Bob")
-      model.email.should eq("anonymous@example.com")  # default
-      model.age.should eq(18)  # default
+      model.email.should eq("anonymous@example.com") # default
+      model.age.should eq(18)                        # default
     end
 
     it "saves record with default values" do

@@ -8,11 +8,11 @@ module Ralph
 
   # Dependent behavior options for associations
   enum DependentBehavior
-    None               # Default: do nothing
-    Destroy            # Destroy associated records (runs callbacks)
-    Delete             # Delete associated records (skips callbacks)
-    Nullify            # Set foreign key to NULL
-    RestrictWithError  # Prevent destruction if associations exist (adds error)
+    None                  # Default: do nothing
+    Destroy               # Destroy associated records (runs callbacks)
+    Delete                # Delete associated records (skips callbacks)
+    Nullify               # Set foreign key to NULL
+    RestrictWithError     # Prevent destruction if associations exist (adds error)
     RestrictWithException # Prevent destruction if associations exist (raises exception)
   end
 
@@ -24,10 +24,10 @@ module Ralph
     property primary_key : String
     property type : Symbol # :belongs_to, :has_one, :has_many
     property through : String?
-    property source : String?       # For through associations: the association name on the through model
+    property source : String? # For through associations: the association name on the through model
     property table_name : String
     property dependent : DependentBehavior
-    property class_name_override : Bool # True if class_name was explicitly set
+    property class_name_override : Bool  # True if class_name was explicitly set
     property foreign_key_override : Bool # True if foreign_key was explicitly set
     property primary_key_override : Bool # True if primary_key was explicitly set
     property polymorphic : Bool          # True if this is a polymorphic belongs_to
@@ -53,7 +53,7 @@ module Ralph
       @as_name : String? = nil,
       @counter_cache : String? = nil,
       @touch : String? = nil,
-      @inverse_of : String? = nil
+      @inverse_of : String? = nil,
     )
     end
   end
@@ -178,16 +178,16 @@ module Ralph
     # - optional: If true, the foreign key can be nil (default: false)
     #
     # Usage:
-    # ```crystal
+    # ```
     # belongs_to user
     # belongs_to author, class_name: "User"
     # belongs_to author, class_name: "User", foreign_key: "writer_id"
     # belongs_to author, class_name: "User", primary_key: "uuid"
-    # belongs_to commentable, polymorphic: true  # Creates commentable_id and commentable_type columns
-    # belongs_to user, touch: true               # Updates user.updated_at on save
-    # belongs_to user, touch: :last_post_at      # Updates user.last_post_at on save
-    # belongs_to publisher, counter_cache: true  # Maintains publisher.books_count (inferred from child table)
-    # belongs_to publisher, counter_cache: "total_books"  # Uses custom column name
+    # belongs_to commentable, polymorphic: true          # Creates commentable_id and commentable_type columns
+    # belongs_to user, touch: true                       # Updates user.updated_at on save
+    # belongs_to user, touch: :last_post_at              # Updates user.last_post_at on save
+    # belongs_to publisher, counter_cache: true          # Maintains publisher.books_count (inferred from child table)
+    # belongs_to publisher, counter_cache: "total_books" # Uses custom column name
     # ```
     macro belongs_to(name, **options)
       {%
@@ -235,12 +235,12 @@ module Ralph
         # We need to get it from @type which represents the current class being defined
         child_table_name = @type.name.stringify.split("::").last.underscore + "s"
         counter_cache_col = if counter_cache_opt == true
-                               child_table_name + "_count"
-                             elsif counter_cache_opt
-                               counter_cache_opt.id.stringify
-                             else
-                               nil
-                             end
+                              child_table_name + "_count"
+                            elsif counter_cache_opt
+                              counter_cache_opt.id.stringify
+                            else
+                              nil
+                            end
 
         # Handle optional option
         optional_opt = options[:optional]
@@ -568,12 +568,12 @@ module Ralph
     #   - :restrict_with_exception - Prevent destruction if associations exist (raises exception)
     #
     # Usage:
-    # ```crystal
+    # ```
     # has_one profile
     # has_one avatar, class_name: "UserAvatar"
     # has_one avatar, class_name: "UserAvatar", foreign_key: "owner_id"
     # has_one profile, dependent: :destroy
-    # has_one profile, as: :profileable  # Polymorphic association
+    # has_one profile, as: :profileable # Polymorphic association
     # ```
     macro has_one(name, **options)
       {%
@@ -753,10 +753,10 @@ module Ralph
       {% end %}
 
       {% if is_polymorphic %}
-        {%
-          # Compute column names at compile time
-          poly_type_col = "#{as_name.id}_type".id
-          poly_id_col = "#{as_name.id}_id".id
+        {% # Compute column names at compile time
+
+poly_type_col = "#{as_name.id}_type".id
+poly_id_col = "#{as_name.id}_id".id
         %}
 
         # Setter for the associated record (polymorphic)
@@ -929,77 +929,77 @@ module Ralph
     # This automatically generates increment/decrement/update callbacks on the child model.
     #
     # Usage:
-    # ```crystal
+    # ```
     # has_many posts
     # has_many articles, class_name: "BlogPost"
     # has_many articles, class_name: "BlogPost", foreign_key: "writer_id"
     # has_many posts, dependent: :destroy
     # has_many posts, dependent: :delete_all
-    # has_many comments, as: :commentable  # Polymorphic association
-    # has_many tags, through: :post_tags   # Through association
-    # has_many tags, through: :post_tags, source: :tag  # Through with custom source
+    # has_many comments, as: :commentable              # Polymorphic association
+    # has_many tags, through: :post_tags               # Through association
+    # has_many tags, through: :post_tags, source: :tag # Through with custom source
     # ```
     macro has_many(name, scope_block = nil, **options)
-      {%
-        # Singularize the class name (e.g., "posts" -> "Post")
-        name_str = name.id.stringify
-        singular_name = name_str[0...-1] # Remove trailing 's'
+      {% # Singularize the class name (e.g., "posts" -> "Post")
 
-        # Handle class_name option
-        class_name_opt = options[:class_name]
-        class_name_override = class_name_opt != nil
-        class_name = class_name_opt ? class_name_opt.id.stringify : singular_name.camelcase
+name_str = name.id.stringify
+singular_name = name_str[0...-1] # Remove trailing 's'
 
-        # Get just the class name without namespace for the default foreign key
-        type_name = @type.name.stringify.split("::").last.underscore
+# Handle class_name option
+class_name_opt = options[:class_name]
+class_name_override = class_name_opt != nil
+class_name = class_name_opt ? class_name_opt.id.stringify : singular_name.camelcase
 
-        # Handle 'as' option for polymorphic associations
-        as_opt = options[:as]
-        is_polymorphic = as_opt != nil
-        as_name = as_opt ? as_opt.id.stringify : nil
+# Get just the class name without namespace for the default foreign key
+type_name = @type.name.stringify.split("::").last.underscore
 
-        # Handle 'through' option for through associations
-        through_opt = options[:through]
-        is_through = through_opt != nil
-        through_name = through_opt ? through_opt.id.stringify : nil
+# Handle 'as' option for polymorphic associations
+as_opt = options[:as]
+is_polymorphic = as_opt != nil
+as_name = as_opt ? as_opt.id.stringify : nil
 
-        # Handle 'source' option for through associations
-        source_opt = options[:source]
-        source_name = source_opt ? source_opt.id.stringify : singular_name
+# Handle 'through' option for through associations
+through_opt = options[:through]
+is_through = through_opt != nil
+through_name = through_opt ? through_opt.id.stringify : nil
 
-        # Handle foreign_key option
-        # For polymorphic, default to {as_name}_id
-        foreign_key_opt = options[:foreign_key]
-        foreign_key_override = foreign_key_opt != nil
-        foreign_key = if foreign_key_opt
-                        foreign_key_opt.id
-                      elsif is_polymorphic && as_name
-                        "#{as_name.id}_id".id
-                      elsif is_through
-                        # For through associations, FK doesn't apply directly
-                        "".id
-                      else
-                        "#{type_name.id}_id".id
-                      end
-        foreign_key_str = foreign_key.id.stringify
+# Handle 'source' option for through associations
+source_opt = options[:source]
+source_name = source_opt ? source_opt.id.stringify : singular_name
 
-        # Handle primary_key option
-        primary_key_opt = options[:primary_key]
-        primary_key_override = primary_key_opt != nil
-        primary_key = primary_key_opt ? primary_key_opt.id.stringify : "id"
+# Handle foreign_key option
+# For polymorphic, default to {as_name}_id
+foreign_key_opt = options[:foreign_key]
+foreign_key_override = foreign_key_opt != nil
+foreign_key = if foreign_key_opt
+                foreign_key_opt.id
+              elsif is_polymorphic && as_name
+                "#{as_name.id}_id".id
+              elsif is_through
+                # For through associations, FK doesn't apply directly
+                "".id
+              else
+                "#{type_name.id}_id".id
+              end
+foreign_key_str = foreign_key.id.stringify
 
-        # Handle dependent option
-        # Note: has_many uses :delete_all instead of :delete for consistency with Rails
-        dependent_opt = options[:dependent]
-        dependent_sym = dependent_opt ? dependent_opt.id.stringify : "none"
+# Handle primary_key option
+primary_key_opt = options[:primary_key]
+primary_key_override = primary_key_opt != nil
+primary_key = primary_key_opt ? primary_key_opt.id.stringify : "id"
 
-        type_str = @type.stringify
+# Handle dependent option
+# Note: has_many uses :delete_all instead of :delete for consistency with Rails
+dependent_opt = options[:dependent]
+dependent_sym = dependent_opt ? dependent_opt.id.stringify : "none"
 
-        # Table name is the underscored class name (usually plural, matching the association name)
-        table_name = name_str
+type_str = @type.stringify
 
-        # Check if we have a scope block
-        has_scope = scope_block != nil
+# Table name is the underscored class name (usually plural, matching the association name)
+table_name = name_str
+
+# Check if we have a scope block
+has_scope = scope_block != nil
       %}
 
       # Register the association metadata
@@ -1290,10 +1290,10 @@ module Ralph
           record
         end
       {% elsif is_polymorphic %}
-        {%
-          # Compute column names at compile time
-          poly_type_col = "#{as_name.id}_type".id
-          poly_id_col = "#{as_name.id}_id".id
+        {% # Compute column names at compile time
+
+poly_type_col = "#{as_name.id}_type".id
+poly_id_col = "#{as_name.id}_id".id
         %}
 
         # Build a new associated record (polymorphic)

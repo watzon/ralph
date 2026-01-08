@@ -21,7 +21,7 @@ module Ralph
       def initialize(
         @output : IO = STDOUT,
         @migrations_dir : String = "./db/migrations",
-        @models_dir : String = "./src/models"
+        @models_dir : String = "./src/models",
       )
       end
 
@@ -179,7 +179,7 @@ module Ralph
         # Parse options for generate commands (after the subcommand)
         name : String? = nil
         fields = [] of String
-        
+
         # Separate name/fields from flags
         non_flag_args = [] of String
         i = 0

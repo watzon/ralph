@@ -91,5 +91,4 @@ module Ralph
       end
     end
   end
-
 end

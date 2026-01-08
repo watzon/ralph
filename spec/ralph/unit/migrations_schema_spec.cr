@@ -147,7 +147,7 @@ describe Ralph::Migrations::Schema::ColumnDefinition do
   it "uses Postgres types when dialect is Postgres" do
     pg_dialect = Ralph::Migrations::Schema::Dialect::Postgres.new
     opts = {} of Symbol => String | Int32 | Int64 | Float64 | Bool | Symbol | Nil
-    
+
     float_col = Ralph::Migrations::Schema::ColumnDefinition.new("price", :float, pg_dialect, opts)
     float_col.to_sql.should contain("DOUBLE PRECISION")
 

@@ -401,7 +401,6 @@ module Ralph
     scope :with_role, ->(q : Query::Builder, role : String) { q.where("role = ?", role) }
     scope :ordered_by_name, ->(q : Query::Builder) { q.order("name", :asc) }
     scope :limited, ->(q : Query::Builder, count : Int32) { q.limit(count) }
-
   end
 end
 

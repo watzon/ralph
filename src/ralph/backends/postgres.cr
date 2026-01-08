@@ -137,7 +137,7 @@ module Ralph
 
       private def convert_placeholders(query : String) : String
         return query unless query.includes?('?')
-        
+
         index = 0
         query.gsub("?") do
           index += 1
@@ -148,7 +148,7 @@ module Ralph
       private def append_returning_id(query : String) : String
         trimmed = query.rstrip
         trimmed = trimmed.rstrip(';')
-        
+
         if trimmed.downcase.includes?("returning")
           trimmed
         else

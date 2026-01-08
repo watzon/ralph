@@ -14,7 +14,6 @@ module Ralph
       has_one profile
       has_many articles
 
-
       @@author1 : Author?
       @@author2 : Author?
 
@@ -38,7 +37,6 @@ module Ralph
       column id, Int64
       column bio_text, String
       column author_id, Int64
-
     end
 
     class Article < Model
@@ -47,7 +45,6 @@ module Ralph
       column id, Int64
       column title, String
       column author_id, Int64
-
 
       @@article1 : Article?
       @@article2 : Article?
@@ -79,7 +76,6 @@ module Ralph
       column body, String
 
       belongs_to article
-
 
       @@comment1 : Comment?
       @@comment2 : Comment?

@@ -12,7 +12,7 @@ module Ralph
     #
     # ## Example
     #
-    # ```crystal
+    # ```
     # # String array
     # type = Ralph::Types::ArrayType(String).new
     # type.dump(["a", "b", "c"])  # => '["a","b","c"]' or '{a,b,c}'
@@ -26,7 +26,7 @@ module Ralph
     #
     # ## Usage in Models
     #
-    # ```crystal
+    # ```
     # class Post < Ralph::Model
     #   column tags : Array(String)
     #   column scores : Array(Int32)
@@ -176,44 +176,44 @@ module Ralph
         {% if T == String %}
           case item
           when String then item
-          else item.to_s
+          else             item.to_s
           end
         {% elsif T == Int32 %}
           case item
-          when Int32 then item
-          when Int64 then item.to_i32
+          when Int32  then item
+          when Int64  then item.to_i32
           when String then item.to_i32?
-          else nil
+          else             nil
           end
         {% elsif T == Int64 %}
           case item
-          when Int64 then item
-          when Int32 then item.to_i64
+          when Int64  then item
+          when Int32  then item.to_i64
           when String then item.to_i64?
-          else nil
+          else             nil
           end
         {% elsif T == Float64 %}
           case item
-          when Float64 then item
-          when Float32 then item.to_f64
+          when Float64      then item
+          when Float32      then item.to_f64
           when Int32, Int64 then item.to_f64
-          when String then item.to_f64?
-          else nil
+          when String       then item.to_f64?
+          else                   nil
           end
         {% elsif T == Float32 %}
           case item
-          when Float32 then item
-          when Float64 then item.to_f32
+          when Float32      then item
+          when Float64      then item.to_f32
           when Int32, Int64 then item.to_f32
-          when String then item.to_f32?
-          else nil
+          when String       then item.to_f32?
+          else                   nil
           end
         {% elsif T == Bool %}
           case item
-          when Bool then item
-          when String then item.downcase == "true" || item == "1"
+          when Bool         then item
+          when String       then item.downcase == "true" || item == "1"
           when Int32, Int64 then item != 0
-          else nil
+          else                   nil
           end
         {% else %}
           item.as?(T)

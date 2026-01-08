@@ -11,7 +11,6 @@ module Ralph
     column category, String
     column views, Int32
     column published, Bool | Nil
-
   end
 
   describe "Advanced Query Clauses" do

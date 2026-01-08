@@ -7,13 +7,13 @@ module Ralph
     #
     # ## Global Registration
     #
-    # ```crystal
+    # ```
     # Ralph::Types::Registry.register(:money, MoneyType.new)
     # ```
     #
     # ## Backend-Specific Registration
     #
-    # ```crystal
+    # ```
     # # Register different implementations for different backends
     # Ralph::Types::Registry.register_for_backend(:postgres, :uuid, PostgresUuidType.new)
     # Ralph::Types::Registry.register_for_backend(:sqlite, :uuid, SqliteUuidType.new)
@@ -21,7 +21,7 @@ module Ralph
     #
     # ## Lookup
     #
-    # ```crystal
+    # ```
     # type = Ralph::Types::Registry.lookup(:uuid, :postgres)
     # ```
     class Registry

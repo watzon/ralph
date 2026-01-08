@@ -12,7 +12,7 @@ module Ralph
     #
     # ## Example
     #
-    # ```crystal
+    # ```
     # enum Status
     #   Active
     #   Inactive
@@ -21,18 +21,18 @@ module Ralph
     #
     # # String storage (default)
     # type = Ralph::Types::EnumType(Status).new
-    # type.dump(Status::Active)  # => "Active"
-    # type.load("Active")        # => Status::Active
+    # type.dump(Status::Active) # => "Active"
+    # type.load("Active")       # => Status::Active
     #
     # # Integer storage
     # type = Ralph::Types::EnumType(Status).new(:integer)
-    # type.dump(Status::Active)  # => 0
-    # type.load(0)               # => Status::Active
+    # type.dump(Status::Active) # => 0
+    # type.load(0)              # => Status::Active
     # ```
     #
     # ## Migration
     #
-    # ```crystal
+    # ```
     # create_table :users do |t|
     #   t.enum :status, values: ["Active", "Inactive", "Suspended"]
     #   t.enum :priority, values: [1, 2, 3], storage: :integer

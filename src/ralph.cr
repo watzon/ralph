@@ -41,7 +41,7 @@ module Ralph
   VERSION = "0.1.0"
 
   # Configure the ORM with a block
-  def self.configure
+  def self.configure(&)
     yield settings
   end
 

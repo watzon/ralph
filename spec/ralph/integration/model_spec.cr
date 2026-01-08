@@ -11,7 +11,6 @@ module Ralph
     column email, String
     column age, Int32 | Nil
     column created_at, Time | Nil
-
   end
 
   # Integration tests for Model CRUD operations

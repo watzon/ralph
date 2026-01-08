@@ -32,7 +32,7 @@ module Ralph
 
     # Presence validation - ensures attribute is not nil/blank
     #
-    # ```crystal
+    # ```
     # validates_presence_of :name
     # validates_presence_of :email, message: "is required"
     # ```
@@ -58,7 +58,7 @@ module Ralph
 
     # Length validation - ensures attribute length is within range
     #
-    # ```crystal
+    # ```
     # validates_length_of :name, min: 3, max: 50
     # validates_length_of :password, minimum: 8, message: "is too short"
     # validates_length_of :username, range: 3..20
@@ -112,7 +112,7 @@ module Ralph
 
     # Format validation - ensures attribute matches regex pattern
     #
-    # ```crystal
+    # ```
     # validates_format_of :email, pattern: /@/
     # validates_format_of :username, pattern: /^[a-zA-Z0-9_]+$/, message: "contains invalid characters"
     # ```
@@ -131,7 +131,7 @@ module Ralph
 
     # Numericality validation - ensures attribute is numeric
     #
-    # ```crystal
+    # ```
     # validates_numericality_of :age
     # validates_numericality_of :price, message: "must be a number"
     # ```
@@ -156,7 +156,7 @@ module Ralph
 
     # Inclusion validation - ensures attribute is in allowed values
     #
-    # ```crystal
+    # ```
     # validates_inclusion_of :status, allow: ["draft", "published", "archived"]
     # validates_inclusion_of :role, allow: ["user", "admin"], message: "is not a valid role"
     # ```
@@ -175,7 +175,7 @@ module Ralph
 
     # Exclusion validation - ensures attribute is NOT in forbidden values
     #
-    # ```crystal
+    # ```
     # validates_exclusion_of :username, forbid: ["admin", "root"]
     # validates_exclusion_of :email, forbid: ["blocked@example.com"], message: "is not allowed"
     # ```
@@ -194,7 +194,7 @@ module Ralph
 
     # Uniqueness validation - ensures attribute is unique in the database
     #
-    # ```crystal
+    # ```
     # validates_uniqueness_of :email
     # validates_uniqueness_of :username, message: "is already taken"
     # ```

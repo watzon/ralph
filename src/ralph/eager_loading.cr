@@ -5,20 +5,20 @@
 # 1. **Preloading** (separate queries) - Default strategy, works with all association types
 #    Uses IN clause batching to load associations efficiently.
 #    ```
-#    # Instead of N+1 queries:
-#    authors = Author.all
-#    authors.each { |a| a.posts }  # N queries!
+# # Instead of N+1 queries:
+# authors = Author.all
+# authors.each { |a| a.posts } # N queries!
 #
-#    # Use preloading for 2 queries total:
-#    authors = Author.includes(:posts).to_a
-#    authors.each { |a| a.posts }  # Already loaded!
+# # Use preloading for 2 queries total:
+# authors = Author.includes(:posts).to_a
+# authors.each { |a| a.posts } # Already loaded!
 #    ```
 #
 # 2. **Eager Loading** (LEFT JOIN) - Single query strategy
 #    Uses LEFT JOIN to fetch all data in one query.
 #    Better for small result sets, but requires row deduplication.
 #    ```
-#    authors = Author.eager_load(:posts).to_a
+# authors = Author.eager_load(:posts).to_a
 #    ```
 #
 # Nested includes are supported:

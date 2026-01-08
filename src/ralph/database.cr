@@ -9,7 +9,7 @@ module Ralph
   # Backends are NOT loaded automatically. Users must explicitly require
   # the backend they want to use:
   #
-  # ```crystal
+  # ```
   # require "ralph/backends/sqlite"   # For SQLite
   # require "ralph/backends/postgres" # For PostgreSQL
   # ```

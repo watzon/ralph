@@ -14,7 +14,6 @@ module Ralph
       column body, String
 
       belongs_to commentable, polymorphic: true
-
     end
 
     class Post < Model
@@ -24,7 +23,6 @@ module Ralph
       column title, String
 
       has_many comments, as: :commentable
-
     end
 
     class Article < Model
@@ -34,7 +32,6 @@ module Ralph
       column title, String
 
       has_many comments, as: :commentable
-
     end
 
     # ========================================
@@ -48,7 +45,6 @@ module Ralph
       column bio, String
 
       belongs_to profileable, polymorphic: true
-
     end
 
     class User < Model
@@ -58,7 +54,6 @@ module Ralph
       column name, String
 
       has_one profile, as: :profileable
-
     end
 
     class Company < Model
@@ -68,7 +63,6 @@ module Ralph
       column name, String
 
       has_one profile, as: :profileable
-
     end
 
     # ========================================
@@ -97,7 +91,6 @@ module Ralph
       def track_destruction
         @@destroyed_names << name.to_s if name
       end
-
     end
 
     class Photo < Model
@@ -107,7 +100,6 @@ module Ralph
       column url, String
 
       has_many tags, as: :taggable, dependent: :destroy
-
     end
 
     class Video < Model
@@ -117,7 +109,6 @@ module Ralph
       column url, String
 
       has_many tags, as: :taggable, dependent: :delete_all
-
     end
   end
 

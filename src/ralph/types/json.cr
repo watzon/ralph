@@ -18,10 +18,10 @@ module Ralph
     #
     # ## Example
     #
-    # ```crystal
+    # ```
     # # Standard JSON
     # type = Ralph::Types::JsonType.new
-    # type.dump({"key" => "value"})  # => "{\"key\":\"value\"}"
+    # type.dump({"key" => "value"})    # => "{\"key\":\"value\"}"
     # type.load("{\"key\":\"value\"}") # => JSON::Any
     #
     # # JSONB (PostgreSQL optimized)
@@ -30,7 +30,7 @@ module Ralph
     #
     # ## Usage in Models
     #
-    # ```crystal
+    # ```
     # class Post < Ralph::Model
     #   column metadata : JSON::Any
     # end

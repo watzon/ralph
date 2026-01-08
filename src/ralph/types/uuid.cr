@@ -12,24 +12,24 @@ module Ralph
     #
     # ## Example
     #
-    # ```crystal
+    # ```
     # type = Ralph::Types::UuidType.new
     # uuid = UUID.random
     #
-    # type.dump(uuid)                           # => "550e8400-e29b-41d4-a716-446655440000"
+    # type.dump(uuid)                                   # => "550e8400-e29b-41d4-a716-446655440000"
     # type.load("550e8400-e29b-41d4-a716-446655440000") # => UUID
     # ```
     #
     # ## Auto-Generation
     #
-    # ```crystal
+    # ```
     # type = Ralph::Types::UuidType.new(auto_generate: true)
     # type.default_sql(:postgres) # => "gen_random_uuid()"
     # ```
     #
     # ## Usage in Models
     #
-    # ```crystal
+    # ```
     # class User < Ralph::Model
     #   column id : UUID, primary: true
     #   column api_key : UUID

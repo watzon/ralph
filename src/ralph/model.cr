@@ -659,8 +659,8 @@ module Ralph
     #
     # Example:
     # ```
-    # User.join_assoc(:posts)         # INNER JOIN posts ON posts.user_id = users.id
-    # Post.join_assoc(:author, :left) # LEFT JOIN users ON users.id = posts.user_id
+    # User.join_assoc(:posts)              # INNER JOIN posts ON posts.user_id = users.id
+    # Post.join_assoc(:author, :left)      # LEFT JOIN users ON users.id = posts.user_id
     # User.join_assoc(:posts, :inner, "p") # INNER JOIN posts AS p ON p.user_id = users.id
     # ```
     def self.join_assoc(association_name : Symbol, join_type : Symbol = :inner, alias as_alias : String? = nil) : Ralph::Query::Builder
@@ -688,12 +688,12 @@ module Ralph
       foreign_key = association.foreign_key
 
       on_clause = if association.type == :belongs_to
-        # For belongs_to: associated_table.id = self_table.foreign_key
-        "\"#{table_name}\".\"id\" = \"#{self.table_name}\".\"#{foreign_key}\""
-      else
-        # For has_one/has_many: associated_table.foreign_key = self_table.id
-        "\"#{table_name}\".\"#{foreign_key}\" = \"#{self.table_name}\".\"id\""
-      end
+                    # For belongs_to: associated_table.id = self_table.foreign_key
+                    "\"#{table_name}\".\"id\" = \"#{self.table_name}\".\"#{foreign_key}\""
+                  else
+                    # For has_one/has_many: associated_table.foreign_key = self_table.id
+                    "\"#{table_name}\".\"#{foreign_key}\" = \"#{self.table_name}\".\"id\""
+                  end
 
       query.join(table_name, on_clause, join_type, as_alias)
     end
@@ -711,7 +711,7 @@ module Ralph
     # ```
     # authors = Author.all
     # Author.preload(authors, :posts)
-    # authors.each { |a| a.posts }  # Already loaded, no additional queries
+    # authors.each { |a| a.posts } # Already loaded, no additional queries
     #
     # # Multiple associations
     # Author.preload(authors, [:posts, :profile])
@@ -975,7 +975,7 @@ module Ralph
       case result
       when Int32 then result
       when Int64 then result.to_i32
-      else 0
+      else            0
       end
     end
 
@@ -988,7 +988,7 @@ module Ralph
       case result
       when Int32 then result.to_i64
       when Int64 then result.as(Int64)
-      else 0_i64
+      else            0_i64
       end
     end
 
@@ -1060,7 +1060,7 @@ module Ralph
       case result
       when Int32 then result.to_i64
       when Int64 then result.as(Int64)
-      else 0_i64
+      else            0_i64
       end
     end
 
@@ -1076,9 +1076,9 @@ module Ralph
       return nil unless result
 
       case result
-      when Int32, Int64 then result.to_f64
+      when Int32, Int64     then result.to_f64
       when Float32, Float64 then result.as(Float64)
-      else nil
+      else                       nil
       end
     end
 
@@ -1094,9 +1094,9 @@ module Ralph
       return nil unless result
 
       case result
-      when Int32, Int64 then result.to_f64
+      when Int32, Int64     then result.to_f64
       when Float32, Float64 then result.as(Float64)
-      else nil
+      else                       nil
       end
     end
 

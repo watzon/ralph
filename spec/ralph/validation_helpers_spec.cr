@@ -13,7 +13,6 @@ module Ralph
 
     validates_presence_of :name
     validates_presence_of :email
-
   end
 
   class PresenceCustomMessageModel < Model
@@ -22,7 +21,6 @@ module Ralph
     column name, String
 
     validates_presence_of :name, message: "is required"
-
   end
 
   # Length validation test models
@@ -34,7 +32,6 @@ module Ralph
 
     validates_length_of :name, min: 3, max: 50
     validates_length_of :email, minimum: 8
-
   end
 
   class LengthRangeModel < Model
@@ -43,7 +40,6 @@ module Ralph
     column name, String
 
     validates_length_of :name, range: 3..20
-
   end
 
   class LengthCustomMessageModel < Model
@@ -52,7 +48,6 @@ module Ralph
     column name, String
 
     validates_length_of :name, min: 5, message: "is too short"
-
   end
 
   # Format validation test models
@@ -64,7 +59,6 @@ module Ralph
 
     validates_format_of :email, pattern: /@/
     validates_format_of :name, pattern: /^[a-zA-Z0-9_]+$/
-
   end
 
   class FormatCustomMessageModel < Model
@@ -73,7 +67,6 @@ module Ralph
     column email, String
 
     validates_format_of :email, pattern: /@/, message: "must contain @"
-
   end
 
   # Numericality validation test models
@@ -83,7 +76,6 @@ module Ralph
     column age, Int32 | Nil
 
     validates_numericality_of :age
-
   end
 
   class NumericalityCustomMessageModel < Model
@@ -92,7 +84,6 @@ module Ralph
     column age, Int32 | Nil
 
     validates_numericality_of :age, message: "must be numeric"
-
   end
 
   # Inclusion validation test models
@@ -104,7 +95,6 @@ module Ralph
 
     validates_inclusion_of :name, allow: ["draft", "published", "archived"]
     validates_inclusion_of :email, allow: ["user", "admin"]
-
   end
 
   class InclusionCustomMessageModel < Model
@@ -113,7 +103,6 @@ module Ralph
     column name, String
 
     validates_inclusion_of :name, allow: ["active", "inactive"], message: "is not a valid status"
-
   end
 
   # Exclusion validation test models
@@ -125,7 +114,6 @@ module Ralph
 
     validates_exclusion_of :name, forbid: ["admin", "root", "system"]
     validates_exclusion_of :email, forbid: ["blocked@example.com"]
-
   end
 
   class ExclusionCustomMessageModel < Model
@@ -134,7 +122,6 @@ module Ralph
     column name, String
 
     validates_exclusion_of :name, forbid: ["admin"], message: "is not allowed"
-
   end
 
   # Uniqueness validation test models
@@ -146,7 +133,6 @@ module Ralph
 
     validates_uniqueness_of :email
     validates_uniqueness_of :name
-
   end
 
   class UniquenessCustomMessageModel < Model
@@ -156,7 +142,6 @@ module Ralph
     column name, String
 
     validates_uniqueness_of :email, message: "is already taken"
-
   end
 
   class UniquenessNilModel < Model
@@ -165,7 +150,6 @@ module Ralph
     column age, Int32 | Nil
 
     validates_uniqueness_of :age
-
   end
 
   # Validation callback test model
@@ -193,7 +177,6 @@ module Ralph
     end
 
     validates_presence_of :name
-
   end
 
   describe "Validation Helpers" do

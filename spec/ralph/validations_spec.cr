@@ -17,7 +17,6 @@ module Ralph
     validate :email, "must contain @" do
       email.to_s.includes?("@")
     end
-
   end
 
   # Model with custom validation method
@@ -34,7 +33,6 @@ module Ralph
         errors.add("name", "is reserved")
       end
     end
-
   end
 
   describe Validations do

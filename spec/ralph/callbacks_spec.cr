@@ -56,7 +56,6 @@ module Ralph
     def after_destroy_callback
       @_callback_log << "after_destroy"
     end
-
   end
 
   describe Callbacks do

@@ -9,7 +9,6 @@ module Ralph
     column id, Int64, primary: true
     column name, String
     column email, String?
-
   end
 
   class JoinTestPost < Model
@@ -20,7 +19,6 @@ module Ralph
     column content, String?
     column user_id, Int64?
     column author_id, Int64?
-
   end
 
   class JoinTestComment < Model
@@ -29,7 +27,6 @@ module Ralph
     column id, Int64, primary: true
     column body, String
     column post_id, Int64?
-
   end
 
   # Test models with associations
@@ -42,7 +39,6 @@ module Ralph
 
     has_many posts, class_name: "JoinAssocPost"
     has_one profile, class_name: "JoinAssocProfile"
-
   end
 
   class JoinAssocPost < Model
@@ -56,7 +52,6 @@ module Ralph
 
     belongs_to user, class_name: "JoinAssocUser"
     has_many comments, class_name: "JoinAssocComment"
-
   end
 
   class JoinAssocComment < Model
@@ -67,7 +62,6 @@ module Ralph
     column post_id, Int64?
 
     belongs_to post, class_name: "JoinAssocPost"
-
   end
 
   class JoinAssocProfile < Model
@@ -78,7 +72,6 @@ module Ralph
     column join_assoc_user_id, Int64?
 
     belongs_to join_assoc_user, class_name: "JoinAssocUser"
-
   end
 
   describe "Joins" do
