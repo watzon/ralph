@@ -4,13 +4,19 @@ Ralph includes a powerful command-line interface (CLI) to help you manage your d
 
 ## Overview
 
-The Ralph CLI is typically invoked via `ralph`. If you haven't built the CLI yet, you can do so with:
+Ralph does not ship pre-compiled CLI binaries. Instead, you create a small Crystal file in your project that compiles together with your migrations and models. This approach is common in the Crystal ecosystem (used by Micrate, Clear, and others) and provides full type safety for your migrations.
+
+For setup instructions, see the [CLI Customization Guide](./customization.md).
+
+Once set up, you can run the CLI with:
 
 ```bash
-crystal build src/bin/ralph.cr -o bin/ralph
-```
+crystal run ./ralph.cr -- [command]
 
-Then you can run it as `./bin/ralph`.
+# Or build once and run directly
+crystal build ralph.cr -o bin/ralph
+./bin/ralph [command]
+```
 
 ## Database Commands
 
@@ -25,20 +31,20 @@ For PostgreSQL, this connects to the default `postgres` database to execute the 
 **Usage:**
 
 ```bash
-ralph db:create
+./ralph.cr db:create
 ```
 
 **Example (SQLite):**
 
 ```bash
-$ ralph db:create
+$ ./ralph.cr db:create
 Created database: ./db/development.sqlite3
 ```
 
 **Example (PostgreSQL):**
 
 ```bash
-$ DATABASE_URL=postgres://localhost/my_app_dev ralph db:create
+$ DATABASE_URL=postgres://localhost/my_app_dev ./ralph.cr db:create
 Created database: my_app_dev
 ```
 
@@ -52,13 +58,13 @@ Drops the database. For PostgreSQL, this command will attempt to terminate all e
 **Usage:**
 
 ```bash
-ralph db:drop
+./ralph.cr db:drop
 ```
 
 **Example:**
 
 ```bash
-$ ralph db:drop
+$ ./ralph.cr db:drop
 Dropped database: ./db/development.sqlite3
 ```
 
@@ -69,7 +75,7 @@ Runs all pending migrations in the migrations directory.
 **Usage:**
 
 ```bash
-ralph db:migrate [options]
+./ralph.cr db:migrate [options]
 ```
 
 **Options:**
@@ -79,18 +85,132 @@ ralph db:migrate [options]
 - `-m, --migrations DIR`: Migrations directory (default: `./db/migrations`)
 - `--models DIR`: Models directory (default: `./src/models`)
 
+### `db:rollback`
+
+Rolls back the most recently applied migration.
+
+**Usage:**
+
+```bash
+./ralph.cr db:rollback
+```
+
+### `db:status`
+
+Shows the status of all migrations (applied or pending).
+
+**Usage:**
+
+```bash
+./ralph.cr db:status
+```
+
+**Example output:**
+
+```
+Migration status:
+Status      Migration ID
+--------------------------------------------------
+[   UP    ] 20260107000001
+[   UP    ] 20260107000002
+[  DOWN   ] 20260107000003
+```
+
+### `db:version`
+
+Shows the current migration version (the most recently applied migration).
+
+**Usage:**
+
+```bash
+./ralph.cr db:version
+```
+
+### `db:seed`
+
+Loads and executes the seed file (`./db/seeds.cr`).
+
+**Usage:**
+
+```bash
+./ralph.cr db:seed
+```
+
+### `db:reset`
+
+Drops, creates, migrates, and seeds the database in one command.
+
+**Usage:**
+
+```bash
+./ralph.cr db:reset
+```
+
+### `db:setup`
+
+Creates the database and runs all migrations.
+
+**Usage:**
+
+```bash
+./ralph.cr db:setup
+```
+
 ---
 
-## Customization
+## Generator Commands
 
-Ralph's CLI can be customized to match your project's directory structure. For more information on how to change default paths or create a custom CLI, see the [CLI Customization Guide](./customization.md).
+### `g:migration`
+
+Creates a new migration file.
+
+**Usage:**
+
+```bash
+./ralph.cr g:migration NAME
+```
+
+**Example:**
+
+```bash
+$ ./ralph.cr g:migration CreateUsers
+Created migration: ./db/migrations/20260108123456_create_users.cr
+```
+
+### `g:model`
+
+Generates a model file and an accompanying migration.
+
+**Usage:**
+
+```bash
+./ralph.cr g:model NAME [field:type ...]
+```
+
+**Example:**
+
+```bash
+./ralph.cr g:model User name:string email:string
+```
+
+### `g:scaffold`
+
+Generates a complete CRUD scaffold including model, migration, and views.
+
+**Usage:**
+
+```bash
+./ralph.cr g:scaffold NAME [field:type ...]
+```
+
+---
 
 ## Global Options
-
 
 - `-e, --env ENV`: Specifies the environment (e.g., `development`, `test`, `production`). Default is `development`.
 - `-d, --database URL`: Overrides the database URL from configuration.
 - `-m, --migrations DIR`: Overrides the migrations directory path. Default is `./db/migrations`.
+- `--models DIR`: Overrides the models directory path. Default is `./src/models`.
 - `-h, --help`: Shows the help message.
 - `version`: Shows the Ralph version.
 
@@ -114,17 +234,17 @@ The CLI automatically detects the database type from the URL scheme (`postgres:/
 
 ### Starting a New Project
 
-1.  Initialize Ralph.
-2.  Run `ralph db:setup` to create the database.
-3.  Generate your first model: `ralph g:model User name:string`.
-4.  Run `ralph db:migrate`.
+1.  Set up the CLI (see [Customization Guide](./customization.md)).
+2.  Run `./ralph.cr db:setup` to create the database.
+3.  Generate your first model: `./ralph.cr g:model User name:string`.
+4.  Run `./ralph.cr db:migrate`.
 
 ### Iterating on Schema
 
-1.  Create a migration: `ralph g:migration AddRoleToUsers`.
+1.  Create a migration: `./ralph.cr g:migration AddRoleToUsers`.
 2.  Edit the generated file in `db/migrations/`.
-3.  Run `ralph db:migrate`.
-4.  If you made a mistake, run `ralph db:rollback`, fix the file, and migrate again.
+3.  Run `./ralph.cr db:migrate`.
+4.  If you made a mistake, run `./ralph.cr db:rollback`, fix the file, and migrate again.
 
 ---
 
@@ -132,7 +252,7 @@ The CLI automatically detects the database type from the URL scheme (`postgres:/
 
 ### "Unknown command"
 
-Ensure you are using the correct command name. Check `ralph --help` for the list of available commands.
+Ensure you are using the correct command name. Check `./ralph.cr help` for the list of available commands.
 
 ### "Database creation not implemented"
 

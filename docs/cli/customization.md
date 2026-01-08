@@ -1,99 +1,81 @@
-# CLI Customization
+# CLI Setup & Customization
 
-Ralph provides a flexible CLI that can be customized to fit your project's structure. By default, Ralph assumes a standard directory structure, but you can override these defaults either at runtime via flags or by creating a custom CLI entry point.
+Ralph does not ship pre-compiled CLI binaries. Instead, you create a small Crystal file in your project that requires your migrations and models, then compiles everything together. This approach is standard in the Crystal ecosystem and provides several benefits:
 
-## Default Behavior
+- **Type Safety**: Your migrations are compiled with full type checking
+- **Flexibility**: Require only the database backends you need
+- **Customization**: Configure paths and defaults for your project structure
 
-If you use the built-in CLI without any customization, Ralph uses the following default paths:
-
-- **Migrations Directory**: `./db/migrations`
-- **Models Directory**: `./src/models`
-- **Database URL**: `sqlite3://./db/#{environment}.sqlite3` (where environment defaults to `development`)
-
-## Customizing via Runtime Flags
-
-The quickest way to customize paths is by using CLI flags at runtime. These flags override the default paths for a single command execution.
-
-### Migrations Directory
-
-Use the `-m` or `--migrations` flag to specify a custom migrations directory:
-
-```bash
-ralph db:migrate -m ./custom/migrations
-ralph g:migration CreateUsers -m ./custom/migrations
-```
-
-### Models Directory
-
-Use the `--models` flag to specify where model files should be generated:
-
-```bash
-ralph g:model User name:string --models ./src/app/models
-```
-
-### Combining Flags
-
-You can combine multiple flags to fully customize the command execution:
-
-```bash
-ralph g:model Post title:string -m ./db/migrations/posts --models ./src/blog/models
-```
-
----
-
-## Creating a Custom CLI
-
-For projects with a non-standard structure, it's often better to create a custom CLI entry point. This allows you to define persistent defaults for your project so you don't have to provide flags every time.
+## Quick Start
 
 ### 1. Create a `ralph.cr` file
 
-Create a file named `ralph.cr` (or any name you prefer) in your project root:
+Create a file named `ralph.cr` in your project root:
 
 ```crystal
-require "ralph"
+#!/usr/bin/env crystal
 
-# Initialize the Runner with custom default paths
-Ralph::Cli::Runner.new(
-  migrations_dir: "./db/my_migrations", # Custom migrations path
-  models_dir: "./src/my_app/models"      # Custom models path
-).run
+require "ralph"
+require "ralph/backends/sqlite"  # and/or "ralph/backends/postgres"
+require "./db/migrations/*"
+require "./src/models/*"         # Optional: only needed for seeds
+
+Ralph::Cli::Runner.new.run
 ```
 
-### 2. Build your custom CLI
+### 2. Run the CLI
 
-Build the executable using the Crystal compiler:
+You can run the CLI directly with Crystal:
+
+```bash
+crystal run ./ralph.cr -- db:migrate
+crystal run ./ralph.cr -- db:status
+crystal run ./ralph.cr -- g:model User name:string
+```
+
+Or build it once for faster subsequent runs:
 
 ```bash
 crystal build ralph.cr -o bin/ralph
+./bin/ralph db:migrate
 ```
 
-### 3. Use your custom CLI
-
-Now you can use your custom binary, and it will use your specified paths by default:
+Or make it executable and run directly:
 
 ```bash
-./bin/ralph db:migrate
-./bin/ralph g:model User name:string
+chmod +x ralph.cr
+./ralph.cr db:migrate
 ```
 
-> **Note**: Even with a custom CLI, you can still use runtime flags to override your custom defaults if needed.
+!!! tip "Using `--`"
+    When using `crystal run`, arguments after `--` are passed to your program. Without it, Crystal interprets them as compiler flags.
 
-## Configuration Summary
+## Configuration Options
 
-| Option | Default Path | CLI Flag | Runner Parameter |
-|--------|--------------|----------|------------------|
-| Migrations | `./db/migrations` | `-m`, `--migrations` | `migrations_dir` |
-| Models | `./src/models` | `--models` | `models_dir` |
+### Custom Paths
 
----
-
-## Example: Lucky Framework Integration
-
-If you are using Ralph with the Lucky framework, you might want to align the paths with Lucky's conventions:
+If your project uses a non-standard directory structure, configure the Runner:
 
 ```crystal
-# ralph.cr
+Ralph::Cli::Runner.new(
+  migrations_dir: "./db/my_migrations",
+  models_dir: "./src/my_app/models"
+).run
+```
+
+### Database URL
+
+Set a default database URL for your project:
+
+```crystal
+#!/usr/bin/env crystal
+
 require "ralph"
+require "ralph/backends/sqlite"
+require "./db/migrations/*"
+
+# Set default database URL (can still be overridden via -d flag or DATABASE_URL)
+ENV["DATABASE_URL"] ||= "sqlite3://./my_app.sqlite3"
 
 Ralph::Cli::Runner.new(
   migrations_dir: "./db/migrations",
@@ -101,4 +83,131 @@ Ralph::Cli::Runner.new(
 ).run
 ```
 
-Then build it: `crystal build ralph.cr -o bin/ralph`. This ensures that when you run `./bin/ralph g:model`, the models are placed in the correct directory for your Lucky application.
+### Multiple Backends
+
+Require only the backends you need:
+
+```crystal
+require "ralph"
+
+# SQLite only
+require "ralph/backends/sqlite"
+
+# PostgreSQL only
+# require "ralph/backends/postgres"
+
+# Both (choose at runtime via DATABASE_URL)
+# require "ralph/backends/sqlite"
+# require "ralph/backends/postgres"
+```
+
+## Runtime Flags
+
+Even with a custom CLI, you can override settings at runtime:
+
+| Option | Flag | Description |
+|--------|------|-------------|
+| Migrations | `-m`, `--migrations` | Migrations directory path |
+| Models | `--models` | Models directory path |
+| Database | `-d`, `--database` | Database URL |
+| Environment | `-e`, `--env` | Environment name |
+
+**Example:**
+
+```bash
+./ralph.cr g:model Post title:string -m ./custom/migrations --models ./custom/models
+```
+
+## Complete Example
+
+Here's a full example for a typical web application:
+
+```crystal
+#!/usr/bin/env crystal
+
+# ralph.cr - CLI entry point for database management
+
+require "ralph"
+
+# Require your database backend(s)
+require "ralph/backends/sqlite"
+# require "ralph/backends/postgres"
+
+# Require all migrations (they auto-register with the migrator)
+require "./db/migrations/*"
+
+# Require models (needed for seeds that create records)
+require "./src/models/*"
+
+# Optional: Set project-specific defaults
+ENV["DATABASE_URL"] ||= "sqlite3://./db/#{ENV["RALPH_ENV"]? || "development"}.sqlite3"
+
+# Run the CLI
+Ralph::Cli::Runner.new(
+  migrations_dir: "./db/migrations",
+  models_dir: "./src/models"
+).run
+```
+
+## Why No Pre-built Binary?
+
+Crystal is a compiled language, and migrations are Crystal code. For the CLI to run your migrations, it must compile them together. This means:
+
+1. **Migrations must be `require`d** at compile time
+2. **The CLI binary includes your migration code**
+3. **Each project needs its own compiled CLI**
+
+This is the same approach used by other Crystal ORMs like Micrate and Clear. The tradeoff is a small setup step in exchange for full type safety and the ability to use any Crystal code in your migrations.
+
+## Framework Integration
+
+### Lucky Framework
+
+```crystal
+# ralph.cr
+require "ralph"
+require "ralph/backends/postgres"
+require "./db/migrations/*"
+require "./src/models/*"
+
+Ralph::Cli::Runner.new(
+  migrations_dir: "./db/migrations",
+  models_dir: "./src/models"
+).run
+```
+
+### Kemal
+
+```crystal
+# ralph.cr
+require "ralph"
+require "ralph/backends/sqlite"
+require "./src/migrations/*"
+require "./src/models/*"
+
+Ralph::Cli::Runner.new(
+  migrations_dir: "./src/migrations",
+  models_dir: "./src/models"
+).run
+```
+
+## Programmatic Migration
+
+You can also run migrations programmatically without the CLI:
+
+```crystal
+require "ralph"
+require "ralph/backends/sqlite"
+require "./db/migrations/*"
+
+# Configure Ralph
+Ralph.configure do |config|
+  config.database = Ralph::Database::SqliteBackend.new("sqlite3://./db.sqlite3")
+end
+
+# Run migrations on startup
+migrator = Ralph::Migrations::Migrator.new(Ralph.database)
+migrator.migrate
+```
+
+This is useful for running migrations automatically when your application starts.
