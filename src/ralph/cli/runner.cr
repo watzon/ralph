@@ -101,6 +101,7 @@ module Ralph
           db:seed                      Load the seed file
           db:reset                     Drop, create, migrate, and seed
           db:setup                     Create database and run migrations
+          db:pool                      Show connection pool status
 
         Generator commands:
           g:migration NAME             Create a new migration
@@ -136,7 +137,7 @@ module Ralph
       private def handle_db_command(args : Array(String))
         if args.empty?
           @output.puts "Error: db command requires a subcommand"
-          @output.puts "Available subcommands: create, drop, migrate, rollback, status, version, seed, reset, setup"
+          @output.puts "Available subcommands: create, drop, migrate, rollback, status, version, seed, reset, setup, pool"
           exit 1
         end
 
@@ -173,6 +174,8 @@ module Ralph
           reset_database(db)
         when "setup"
           setup_database
+        when "pool"
+          pool_status(db)
         else
           @output.puts "Unknown db command: #{subcommand}"
           exit 1
@@ -443,6 +446,65 @@ module Ralph
         else
           @output.puts "No migrations have been run"
         end
+      end
+
+      # Show connection pool status and statistics
+      private def pool_status(db)
+        @output.puts "Connection Pool Status"
+        @output.puts "=" * 50
+        @output.puts ""
+
+        # Configuration
+        settings = Ralph.settings
+        @output.puts "Configuration:"
+        @output.puts "  Initial pool size:    #{settings.initial_pool_size}"
+        @output.puts "  Max pool size:        #{settings.max_pool_size == 0 ? "unlimited" : settings.max_pool_size}"
+        @output.puts "  Max idle pool size:   #{settings.max_idle_pool_size}"
+        @output.puts "  Checkout timeout:     #{settings.checkout_timeout}s"
+        @output.puts "  Retry attempts:       #{settings.retry_attempts}"
+        @output.puts "  Retry delay:          #{settings.retry_delay}s"
+        @output.puts ""
+
+        # Runtime statistics
+        stats = db.pool_stats
+        @output.puts "Runtime Statistics:"
+        @output.puts "  Open connections:     #{stats.open_connections}"
+        @output.puts "  Idle connections:     #{stats.idle_connections}"
+        @output.puts "  In-flight connections: #{stats.in_flight_connections}"
+        @output.puts "  Max connections:      #{stats.max_connections == 0 ? "unlimited" : stats.max_connections}"
+        @output.puts ""
+
+        # Calculate utilization
+        if stats.max_connections > 0
+          utilization = (stats.in_flight_connections.to_f / stats.max_connections * 100).round(1)
+          @output.puts "  Pool utilization:     #{utilization}%"
+        end
+        @output.puts ""
+
+        # Health check
+        @output.puts "Health Check:"
+        healthy = db.pool_healthy?
+        if healthy
+          @output.puts "  Status:               OK"
+        else
+          @output.puts "  Status:               FAILED"
+        end
+        @output.puts ""
+
+        # Validation warnings
+        warnings = settings.validate_pool_settings
+        if warnings.any?
+          @output.puts "Warnings:"
+          warnings.each do |warning|
+            @output.puts "  ⚠ #{warning}"
+          end
+          @output.puts ""
+        end
+
+        # Backend info
+        @output.puts "Backend:"
+        @output.puts "  Dialect:              #{db.dialect}"
+        @output.puts "  Closed:               #{db.closed?}"
       end
 
       private def create_migration(name : String)

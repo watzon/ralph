@@ -37,6 +37,7 @@ Ralph is feature-complete for most common ORM use cases. The core is stable and 
 - **Backends** - SQLite, PostgreSQL
 - **Transactions** - nested transactions (savepoints), after_commit/after_rollback callbacks
 - **Migrations** - full schema DSL, foreign keys, indexes, column modifications
+- **Connection Pooling** - configurable pool size/timeouts, idle connection management, health checks
 
 ### Type System
 - **Built-in** - Enum (string/integer/native), JSON/JSONB, UUID, Arrays
@@ -65,11 +66,6 @@ Ralph is feature-complete for most common ORM use cases. The core is stable and 
 ## Planned
 
 ### Near Term
-
-#### Connection Pooling
-- Configurable pool size and timeouts
-- Idle connection management
-- Health checks
 
 #### Bulk Operations
 - Batch insert (`import`)
@@ -140,4 +136,4 @@ Ralph follows [Semantic Versioning](https://semver.org/). Until 1.0:
 - Patch versions are for bug fixes only
 - The CHANGELOG documents all changes
 
-**Target for 1.0:** Stable API, connection pooling, comprehensive documentation.
+**Target for 1.0:** Stable API, comprehensive documentation.

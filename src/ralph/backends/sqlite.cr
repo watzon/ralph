@@ -1,5 +1,6 @@
 require "db"
 require "sqlite3"
+require "uri"
 
 module Ralph
   module Database
@@ -28,6 +29,21 @@ module Ralph
     # Special values:
     # - `sqlite3::memory:` - Creates an in-memory database
     #
+    # ## Connection Pooling
+    #
+    # Connection pooling is configured automatically from `Ralph.settings`:
+    #
+    # ```
+    # Ralph.configure do |config|
+    #   config.initial_pool_size = 5
+    #   config.max_pool_size = 25
+    #   config.max_idle_pool_size = 10
+    #   config.checkout_timeout = 5.0
+    #   config.retry_attempts = 3
+    #   config.retry_delay = 0.2
+    # end
+    # ```
+    #
     # ## Concurrency
     #
     # SQLite only supports one writer at a time. This backend provides two modes:
@@ -48,6 +64,7 @@ module Ralph
       @closed : Bool = false
       @wal_mode : Bool
       @write_mutex : Mutex
+      @connection_string : String
 
       # Creates a new SQLite backend with the given connection string
       #
@@ -56,6 +73,7 @@ module Ralph
       # - `connection_string`: SQLite connection URI
       # - `wal_mode`: Enable WAL mode for better concurrency (default: false)
       # - `busy_timeout`: Milliseconds to wait for locks (default: 5000)
+      # - `apply_pool_settings`: Whether to apply pool settings from Ralph.settings (default: true)
       #
       # ## Example
       #
@@ -65,11 +83,23 @@ module Ralph
       #
       # # Production usage with WAL mode
       # backend = Ralph::Database::SqliteBackend.new("sqlite3://./db.sqlite3", wal_mode: true)
+      #
+      # # Skip pool settings (useful for CLI tools)
+      # backend = Ralph::Database::SqliteBackend.new("sqlite3://./db.sqlite3", apply_pool_settings: false)
       # ```
-      def initialize(@connection_string : String, wal_mode : Bool = false, busy_timeout : Int32 = 5000)
-        @db = DB.open(connection_string)
+      def initialize(connection_string : String, wal_mode : Bool = false, busy_timeout : Int32 = 5000, apply_pool_settings : Bool = true)
+        @connection_string = connection_string
         @write_mutex = Mutex.new
         @wal_mode = wal_mode
+
+        # Build connection string with pool parameters
+        final_connection_string = if apply_pool_settings
+                                    build_pooled_connection_string(connection_string)
+                                  else
+                                    connection_string
+                                  end
+
+        @db = DB.open(final_connection_string)
 
         # Set a busy timeout to wait for locks instead of failing immediately
         @db.exec("PRAGMA busy_timeout=#{busy_timeout}")
@@ -77,6 +107,38 @@ module Ralph
         # Enable WAL mode if requested (skip for in-memory databases)
         if wal_mode && !connection_string.includes?(":memory:")
           @db.exec("PRAGMA journal_mode=WAL")
+        end
+      end
+
+      # Build connection string with pool parameters from Ralph.settings
+      private def build_pooled_connection_string(base_url : String) : String
+        settings = Ralph.settings
+
+        # Handle special SQLite URI formats
+        # sqlite3::memory: -> special in-memory format
+        # sqlite3://path -> standard URI format
+        if base_url.starts_with?("sqlite3::memory:")
+          # In-memory databases use a special format
+          # Append pool params as query string
+          params = HTTP::Params.build do |p|
+            settings.pool_params.each do |key, value|
+              p.add(key, value)
+            end
+          end
+          "#{base_url}?#{params}"
+        else
+          # Standard URI format
+          uri = URI.parse(base_url)
+
+          # Parse existing query params and merge with pool settings
+          existing_params = HTTP::Params.parse(uri.query || "")
+          settings.pool_params.each do |key, value|
+            # Don't override existing params (user-specified takes precedence)
+            existing_params[key] = value unless existing_params.has_key?(key)
+          end
+
+          uri.query = existing_params.to_s
+          uri.to_s
         end
       end
 
@@ -181,6 +243,11 @@ module Ralph
       # Whether WAL mode is enabled
       def wal_mode? : Bool
         @wal_mode
+      end
+
+      # Get the original connection string (without pool params)
+      def connection_string : String
+        @connection_string
       end
 
       # Serialize write operations through a mutex when not in WAL mode.

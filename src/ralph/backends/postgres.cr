@@ -1,5 +1,6 @@
 require "db"
 require "pg"
+require "uri"
 
 module Ralph
   module Database
@@ -27,6 +28,21 @@ module Ralph
     # - `host=/path/to/socket` - Unix socket path
     # - `sslmode=require` - Require SSL connection
     #
+    # ## Connection Pooling
+    #
+    # Connection pooling is configured automatically from `Ralph.settings`:
+    #
+    # ```
+    # Ralph.configure do |config|
+    #   config.initial_pool_size = 5
+    #   config.max_pool_size = 25
+    #   config.max_idle_pool_size = 10
+    #   config.checkout_timeout = 5.0
+    #   config.retry_attempts = 3
+    #   config.retry_delay = 0.2
+    # end
+    # ```
+    #
     # ## Placeholder Conversion
     #
     # This backend automatically converts `?` placeholders to PostgreSQL's
@@ -39,16 +55,51 @@ module Ralph
     class PostgresBackend < Backend
       @db : ::DB::Database
       @closed : Bool = false
+      @connection_string : String
 
       # Creates a new PostgreSQL backend with the given connection string
+      #
+      # ## Parameters
+      #
+      # - `connection_string`: PostgreSQL connection URI
+      # - `apply_pool_settings`: Whether to apply pool settings from Ralph.settings (default: true)
       #
       # ## Example
       #
       # ```
+      # # Basic usage
       # backend = Ralph::Database::PostgresBackend.new("postgres://localhost/mydb")
+      #
+      # # Skip pool settings (useful for CLI tools)
+      # backend = Ralph::Database::PostgresBackend.new("postgres://localhost/mydb", apply_pool_settings: false)
       # ```
-      def initialize(@connection_string : String)
-        @db = DB.open(connection_string)
+      def initialize(connection_string : String, apply_pool_settings : Bool = true)
+        @connection_string = connection_string
+
+        # Build connection string with pool parameters
+        final_connection_string = if apply_pool_settings
+                                    build_pooled_connection_string(connection_string)
+                                  else
+                                    connection_string
+                                  end
+
+        @db = DB.open(final_connection_string)
+      end
+
+      # Build connection string with pool parameters from Ralph.settings
+      private def build_pooled_connection_string(base_url : String) : String
+        settings = Ralph.settings
+        uri = URI.parse(base_url)
+
+        # Parse existing query params and merge with pool settings
+        existing_params = HTTP::Params.parse(uri.query || "")
+        settings.pool_params.each do |key, value|
+          # Don't override existing params (user-specified takes precedence)
+          existing_params[key] = value unless existing_params.has_key?(key)
+        end
+
+        uri.query = existing_params.to_s
+        uri.to_s
       end
 
       def execute(query : String, args : Array(DB::Any) = [] of DB::Any)
@@ -133,6 +184,11 @@ module Ralph
 
       def dialect : Symbol
         :postgres
+      end
+
+      # Get the original connection string (without pool params)
+      def connection_string : String
+        @connection_string
       end
 
       # ========================================

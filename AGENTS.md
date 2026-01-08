@@ -299,7 +299,7 @@ ralph g:scaffold N    # Generate full CRUD
 crystal spec
 
 # PostgreSQL integration
-DB_ADAPTER=postgres POSTGRES_URL=postgres://... crystal spec spec/ralph/integration/
+DB_ADAPTER=postgres POSTGRES_URL=postgres://postgres@localhost:5432/ralph_test crystal spec spec/ralph/integration/
 ```
 
 Test helpers:

@@ -69,6 +69,133 @@ module Ralph
   def self.database
     settings.database || raise "Database not configured. Call Ralph.configure first."
   end
+
+  # Connection Pool Methods
+  # =======================
+
+  # Get current connection pool statistics
+  #
+  # Returns pool statistics if a database is configured, nil otherwise.
+  # Useful for monitoring connection pool health in production.
+  #
+  # ## Example
+  #
+  # ```
+  # if stats = Ralph.pool_stats
+  #   puts "Open connections: #{stats.open_connections}"
+  #   puts "Idle connections: #{stats.idle_connections}"
+  #   puts "In-flight connections: #{stats.in_flight_connections}"
+  #   puts "Max connections: #{stats.max_connections}"
+  # end
+  # ```
+  #
+  # ## Monitoring
+  #
+  # Use this method to:
+  # - Monitor connection usage in production
+  # - Detect connection pool exhaustion
+  # - Tune pool configuration parameters
+  def self.pool_stats : Database::PoolStats?
+    if db = settings.database
+      db.pool_stats
+    end
+  end
+
+  # Check if the database connection pool is healthy
+  #
+  # Performs a simple health check query to verify database connectivity.
+  # Returns true if the database is reachable and responsive, false otherwise.
+  #
+  # ## Example
+  #
+  # ```
+  # if Ralph.pool_healthy?
+  #   puts "Database connection: OK"
+  # else
+  #   puts "Database connection: FAILED"
+  # end
+  # ```
+  #
+  # ## Health Checks
+  #
+  # Use this method for:
+  # - Kubernetes/Docker health check endpoints
+  # - Load balancer health probes
+  # - Application startup verification
+  # - Periodic monitoring
+  def self.pool_healthy? : Bool
+    if db = settings.database
+      db.pool_healthy?
+    else
+      false
+    end
+  end
+
+  # Get detailed pool information including configuration
+  #
+  # Returns a hash with current pool statistics and configuration settings.
+  # Useful for debugging and monitoring dashboards.
+  #
+  # ## Example
+  #
+  # ```
+  # info = Ralph.pool_info
+  # puts "Pool status:"
+  # info.each do |key, value|
+  #   puts "  #{key}: #{value}"
+  # end
+  # ```
+  def self.pool_info : Hash(String, String | Int32 | Float64 | Bool)
+    info = {} of String => String | Int32 | Float64 | Bool
+
+    # Configuration settings
+    info["initial_pool_size"] = settings.initial_pool_size
+    info["max_pool_size"] = settings.max_pool_size
+    info["max_idle_pool_size"] = settings.max_idle_pool_size
+    info["checkout_timeout"] = settings.checkout_timeout
+    info["retry_attempts"] = settings.retry_attempts
+    info["retry_delay"] = settings.retry_delay
+
+    # Runtime statistics
+    if stats = pool_stats
+      info["open_connections"] = stats.open_connections
+      info["idle_connections"] = stats.idle_connections
+      info["in_flight_connections"] = stats.in_flight_connections
+      info["max_connections"] = stats.max_connections
+    end
+
+    # Health status
+    info["healthy"] = pool_healthy?
+
+    # Backend info
+    if db = settings.database
+      info["dialect"] = db.dialect.to_s
+      info["closed"] = db.closed?
+    end
+
+    info
+  end
+
+  # Validate pool configuration and return any warnings
+  #
+  # Returns an array of warning messages about potential pool configuration issues.
+  # Empty array means all settings are valid.
+  #
+  # ## Example
+  #
+  # ```
+  # warnings = Ralph.validate_pool_config
+  # if warnings.empty?
+  #   puts "Pool configuration: OK"
+  # else
+  #   warnings.each do |warning|
+  #     puts "WARNING: #{warning}"
+  #   end
+  # end
+  # ```
+  def self.validate_pool_config : Array(String)
+    settings.validate_pool_settings
+  end
 end
 
 # Core library requires
