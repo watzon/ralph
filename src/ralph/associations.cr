@@ -755,9 +755,8 @@ module Ralph
       {% if is_polymorphic %}
         {% # Compute column names at compile time
 
-poly_type_col = "#{as_name.id}_type".id
-poly_id_col = "#{as_name.id}_id".id
-        %}
+ poly_type_col = "#{as_name.id}_type".id
+ poly_id_col = "#{as_name.id}_id".id %}
 
         # Setter for the associated record (polymorphic)
         def {{name}}=(record : {{class_name.id}}?)
@@ -942,65 +941,64 @@ poly_id_col = "#{as_name.id}_id".id
     macro has_many(name, scope_block = nil, **options)
       {% # Singularize the class name (e.g., "posts" -> "Post")
 
-name_str = name.id.stringify
-singular_name = name_str[0...-1] # Remove trailing 's'
+ name_str = name.id.stringify
+ singular_name = name_str[0...-1] # Remove trailing 's'
 
-# Handle class_name option
-class_name_opt = options[:class_name]
-class_name_override = class_name_opt != nil
-class_name = class_name_opt ? class_name_opt.id.stringify : singular_name.camelcase
+ # Handle class_name option
+ class_name_opt = options[:class_name]
+ class_name_override = class_name_opt != nil
+ class_name = class_name_opt ? class_name_opt.id.stringify : singular_name.camelcase
 
-# Get just the class name without namespace for the default foreign key
-type_name = @type.name.stringify.split("::").last.underscore
+ # Get just the class name without namespace for the default foreign key
+ type_name = @type.name.stringify.split("::").last.underscore
 
-# Handle 'as' option for polymorphic associations
-as_opt = options[:as]
-is_polymorphic = as_opt != nil
-as_name = as_opt ? as_opt.id.stringify : nil
+ # Handle 'as' option for polymorphic associations
+ as_opt = options[:as]
+ is_polymorphic = as_opt != nil
+ as_name = as_opt ? as_opt.id.stringify : nil
 
-# Handle 'through' option for through associations
-through_opt = options[:through]
-is_through = through_opt != nil
-through_name = through_opt ? through_opt.id.stringify : nil
+ # Handle 'through' option for through associations
+ through_opt = options[:through]
+ is_through = through_opt != nil
+ through_name = through_opt ? through_opt.id.stringify : nil
 
-# Handle 'source' option for through associations
-source_opt = options[:source]
-source_name = source_opt ? source_opt.id.stringify : singular_name
+ # Handle 'source' option for through associations
+ source_opt = options[:source]
+ source_name = source_opt ? source_opt.id.stringify : singular_name
 
-# Handle foreign_key option
-# For polymorphic, default to {as_name}_id
-foreign_key_opt = options[:foreign_key]
-foreign_key_override = foreign_key_opt != nil
-foreign_key = if foreign_key_opt
-                foreign_key_opt.id
-              elsif is_polymorphic && as_name
-                "#{as_name.id}_id".id
-              elsif is_through
-                # For through associations, FK doesn't apply directly
-                "".id
-              else
-                "#{type_name.id}_id".id
-              end
-foreign_key_str = foreign_key.id.stringify
+ # Handle foreign_key option
+ # For polymorphic, default to {as_name}_id
+ foreign_key_opt = options[:foreign_key]
+ foreign_key_override = foreign_key_opt != nil
+ foreign_key = if foreign_key_opt
+                 foreign_key_opt.id
+               elsif is_polymorphic && as_name
+                 "#{as_name.id}_id".id
+               elsif is_through
+                 # For through associations, FK doesn't apply directly
+                 "".id
+               else
+                 "#{type_name.id}_id".id
+               end
+ foreign_key_str = foreign_key.id.stringify
 
-# Handle primary_key option
-primary_key_opt = options[:primary_key]
-primary_key_override = primary_key_opt != nil
-primary_key = primary_key_opt ? primary_key_opt.id.stringify : "id"
+ # Handle primary_key option
+ primary_key_opt = options[:primary_key]
+ primary_key_override = primary_key_opt != nil
+ primary_key = primary_key_opt ? primary_key_opt.id.stringify : "id"
 
-# Handle dependent option
-# Note: has_many uses :delete_all instead of :delete for consistency with Rails
-dependent_opt = options[:dependent]
-dependent_sym = dependent_opt ? dependent_opt.id.stringify : "none"
+ # Handle dependent option
+ # Note: has_many uses :delete_all instead of :delete for consistency with Rails
+ dependent_opt = options[:dependent]
+ dependent_sym = dependent_opt ? dependent_opt.id.stringify : "none"
 
-type_str = @type.stringify
+ type_str = @type.stringify
 
-# Table name is the underscored class name (usually plural, matching the association name)
-table_name = name_str
+ # Table name is the underscored class name (usually plural, matching the association name)
+ table_name = name_str
 
-# Check if we have a scope block
-has_scope = scope_block != nil
-      %}
+ # Check if we have a scope block
+ has_scope = scope_block != nil %}
 
       # Register the association metadata
       {% if @type.has_constant?("_ralph_associations") %}
@@ -1292,9 +1290,8 @@ has_scope = scope_block != nil
       {% elsif is_polymorphic %}
         {% # Compute column names at compile time
 
-poly_type_col = "#{as_name.id}_type".id
-poly_id_col = "#{as_name.id}_id".id
-        %}
+ poly_type_col = "#{as_name.id}_type".id
+ poly_id_col = "#{as_name.id}_id".id %}
 
         # Build a new associated record (polymorphic)
         def build_{{singular_name.id}}(**attrs) : {{class_name.id}}
