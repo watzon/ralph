@@ -14,6 +14,7 @@ create_table :products do |t|
   t.decimal :price, precision: 10, scale: 2
   t.boolean :active, default: true
   t.timestamps              # Adds 'created_at' and 'updated_at'
+  t.soft_deletes            # Adds 'deleted_at'
 
   t.index :name             # Adds an index on the 'name' column
 end
@@ -48,6 +49,7 @@ Ralph provides specialized types with automatic backend adaptation:
 | `jsonb`           | `TEXT`      | `JSONB`         | JSON document (binary, indexed) |
 | `uuid`            | `CHAR(36)`  | `UUID`          | Universally unique identifier  |
 | `enum`            | `VARCHAR`   | `ENUM` or `VARCHAR` | Enumerated values          |
+| `soft_deletes`    | `DATETIME`  | `TIMESTAMP`     | Adds `deleted_at` column       |
 | `string_array`    | `TEXT`      | `TEXT[]`        | Array of strings               |
 | `integer_array`   | `TEXT`      | `INTEGER[]`     | Array of integers              |
 | `bigint_array`    | `TEXT`      | `BIGINT[]`      | Array of large integers        |
@@ -520,7 +522,7 @@ create_table :users do |t|
   t.primary_key
   t.string :email
   t.boolean :active, default: true
-  t.timestamp :deleted_at
+  t.soft_deletes
   
   # Only index active users (smaller, faster index)
   t.partial_index("email", condition: "active = true", unique: true)
@@ -611,7 +613,7 @@ class CreateBlogSchema_20240115100000 < Ralph::Migrations::Migration
       t.string_array :tags, default: "[]"
       t.jsonb :metadata, default: "{}"
       t.boolean :published, default: false
-      t.timestamp :deleted_at
+      t.soft_deletes
       t.timestamps
       
       # Full-text search on content

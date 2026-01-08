@@ -126,21 +126,21 @@ Wait, Crystal usually uses `snake_case` for variables and methods too! Ralph fol
 
 ## Automatic Timestamps
 
-Ralph provides a `timestamps` macro that automatically manages `created_at` and `updated_at` columns:
+Ralph provides a `Ralph::Timestamps` module that automatically manages `created_at` and `updated_at` columns when included in your model:
 
 ```crystal
 class Post < Ralph::Model
+  include Ralph::Timestamps
+
   table :posts
 
   column id : Int64, primary: true
   column title : String
   column body : String
-
-  timestamps  # adds created_at and updated_at
 end
 ```
 
-This macro:
+This module:
 - Adds `created_at : Time?` column - set automatically when a record is first created
 - Adds `updated_at : Time?` column - set automatically on every save (create or update)
 
@@ -159,23 +159,23 @@ post.updated_at  # => 2026-01-08 12:05:00 UTC (updated)
 
 ## Model Configuration Order
 
-For clarity and to ensure macros work correctly, it is recommended to define your model in the following order:
+For clarity and to ensure modules and macros work correctly, it is recommended to define your model in the following order:
 
-1. Table name (`table :name`)
-2. Primary key and columns (`column ...`)
-3. Timestamps (`timestamps`)
+1. Module includes (`include Ralph::Timestamps`, `include Ralph::ActsAsParanoid`)
+2. Table name (`table :name`)
+3. Primary key and columns (`column ...`)
 4. Validations (`validates_...`)
 5. Associations (`belongs_to`, `has_many`, etc.)
 6. Custom methods and logic
 
 ```crystal
 class User < Ralph::Model
+  include Ralph::Timestamps
+
   table :users
 
   column id : Int64, primary: true
   column email : String
-
-  timestamps
 
   validates_presence_of :email
 
