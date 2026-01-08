@@ -83,11 +83,25 @@ For comprehensive documentation including associations, validations, callbacks, 
 
 ### CLI
 
+Ralph includes a CLI for database management. Create a `ralph.cr` file in your project (see [CLI docs](https://ralph-docs.wtz.nz/cli/customization/)), then:
+
 ```sh
-ralph db:migrate      # Run pending migrations
-ralph db:rollback     # Roll back last migration
-ralph g:model User    # Generate model
-ralph g:migration X   # Generate migration
+# Initial setup
+./ralph.cr db:create      # Create the database
+./ralph.cr db:migrate     # Run pending migrations
+./ralph.cr db:seed        # Seed with initial data (optional)
+
+# Start your application
+crystal run src/app.cr
+```
+
+Other useful commands:
+
+```sh
+./ralph.cr db:rollback    # Roll back last migration
+./ralph.cr db:status      # Show migration status
+./ralph.cr g:model User   # Generate model
+./ralph.cr g:migration X  # Generate migration
 ```
 
 ## API

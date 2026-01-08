@@ -74,6 +74,62 @@ user = User.find_by("email", "alice@example.com")
 active_users = User.find_all_by("active", true)
 ```
 
+### Find or Initialize / Find or Create
+
+These methods are useful when you want to find an existing record or create a new one if it doesn't exist. They're particularly helpful for seeding databases or implementing idempotent operations.
+
+#### `find_or_initialize_by`
+
+Finds a record matching the given conditions, or initializes a new one (without saving) if no match is found. The new record will have the search conditions set as attributes.
+
+```crystal
+# Without block - just sets the search conditions
+user = User.find_or_initialize_by({"email" => "alice@example.com"})
+
+# With block - set additional attributes on new records
+user = User.find_or_initialize_by({"email" => "alice@example.com"}) do |u|
+  u.name = "Alice"
+  u.role = "user"
+end
+
+# The block is only called for NEW records, not existing ones
+if user.new_record?
+  user.save  # Must save manually
+end
+```
+
+#### `find_or_create_by`
+
+Similar to `find_or_initialize_by`, but automatically saves the new record if one is created.
+
+```crystal
+# Find existing or create new (and save)
+user = User.find_or_create_by({"email" => "alice@example.com"}) do |u|
+  u.name = "Alice"
+  u.role = "user"
+end
+
+# The record is already persisted if it was newly created
+puts user.persisted?  # => true
+```
+
+#### Use Cases
+
+These methods are ideal for:
+
+- **Database seeding**: Create records only if they don't already exist
+- **Idempotent operations**: Safely run the same code multiple times
+- **Upsert-like patterns**: Find existing or create new in one operation
+
+```crystal
+# Example: Idempotent seed file
+admin = User.find_or_create_by({"email" => "admin@example.com"}) do |u|
+  u.name = "Administrator"
+  u.role = "admin"
+  u.password = "secure_password"
+end
+```
+
 ## Querying Records
 
 For more complex queries, Ralph provides a fluent, type-safe query builder via the `query` block.
@@ -118,6 +174,19 @@ You can also use the `update` method to set multiple attributes and save in a si
 user = User.find(1)
 user.update(name: "New Name", age: 30) if user
 ```
+
+### Dynamic Attribute Assignment
+
+For cases where you need to set an attribute by name at runtime (e.g., when the attribute name is stored in a variable), use `set_attribute`:
+
+```crystal
+user = User.new
+user.set_attribute("name", "Alice")
+user.set_attribute("email", "alice@example.com")
+user.save
+```
+
+This is primarily useful for dynamic scenarios like building records from form data or implementing generic update logic.
 
 ## Deleting Records
 

@@ -128,13 +128,41 @@ Shows the current migration version (the most recently applied migration).
 
 ### `db:seed`
 
-Loads and executes the seed file (`./db/seeds.cr`).
+Loads and executes the seed file (`./db/seeds.cr`). The seed file is a regular Crystal file that runs independently, so it must require Ralph and configure the database connection.
 
 **Usage:**
 
 ```bash
 ./ralph.cr db:seed
 ```
+
+**Creating a Seed File:**
+
+Create `db/seeds.cr` in your project:
+
+```crystal
+#!/usr/bin/env crystal
+
+require "ralph"
+require "ralph/backends/sqlite"  # or postgres
+require "../src/models/*"
+
+# Configure database (must match your app's configuration)
+Ralph.configure do |config|
+  config.database = Ralph::Database::SqliteBackend.new("sqlite3://./db/development.sqlite3")
+end
+
+# Use find_or_create_by for idempotent seeds
+admin = User.find_or_create_by({"email" => "admin@example.com"}) do |u|
+  u.name = "Administrator"
+  u.role = "admin"
+end
+
+puts "Seeded #{User.count} users"
+```
+
+!!! tip "Idempotent Seeds"
+    Use `find_or_create_by` or `find_or_initialize_by` to make your seeds idempotent—safe to run multiple times without creating duplicates. See [CRUD Operations](../models/crud-operations.md#find-or-initialize-find-or-create) for details.
 
 ### `db:reset`
 
