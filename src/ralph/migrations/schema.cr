@@ -285,6 +285,35 @@ module Ralph
           column("updated_at", :timestamp, null: false)
         end
 
+        # Add deleted_at timestamp column for soft deletes
+        #
+        # Use this in conjunction with the `paranoid` macro in your model
+        # to enable soft delete functionality.
+        #
+        # ## Example
+        #
+        # ```
+        # # Migration
+        # create_table :users do |t|
+        #   t.primary_key
+        #   t.string :name
+        #   t.timestamps
+        #   t.soft_deletes # adds deleted_at column
+        # end
+        #
+        # # Model
+        # class User < Ralph::Model
+        #   table :users
+        #   column id, Int64, primary: true
+        #   column name, String
+        #   timestamps
+        #   paranoid # enables soft delete behavior
+        # end
+        # ```
+        def soft_deletes
+          column("deleted_at", :timestamp)
+        end
+
         # UUID column
         #
         # ## Options

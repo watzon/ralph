@@ -289,6 +289,8 @@ module Ralph
         end
 
         # Generate destroy method with callbacks
+        # Skip if paranoid macro is used (it defines its own destroy method)
+        \{% unless @type.has_constant?("PARANOID_MODE") %}
         def destroy : Bool
           return false if new_record?
 
@@ -369,6 +371,7 @@ module Ralph
 
           result
         end
+        \{% end %}
 
         # Generate valid? method that calls all validation methods
         def valid? : Bool
@@ -425,48 +428,6 @@ module Ralph
       @@table_name = {{name}}
     end
 
-    # Define automatic timestamp columns (created_at, updated_at)
-    #
-    # This macro adds:
-    # - `created_at : Time?` column - set automatically when record is first created
-    # - `updated_at : Time?` column - set automatically on every save
-    #
-    # Example:
-    # ```
-    # class User < Ralph::Model
-    #   table :users
-    #
-    #   column id : Int64, primary: true
-    #   column name : String
-    #
-    #   timestamps # adds created_at and updated_at
-    # end
-    #
-    # user = User.create(name: "Alice")
-    # user.created_at # => Time.utc (when created)
-    # user.updated_at # => Time.utc (same as created_at initially)
-    #
-    # user.name = "Bob"
-    # user.save
-    # user.updated_at # => Time.utc (updated to current time)
-    # ```
-    macro timestamps
-      column created_at, Time?
-      column updated_at, Time?
-
-      # Method to set created_at on new records (called by save before insert)
-      # Uses _ralph_timestamp_ prefix so macro finished can detect and call it
-      private def _ralph_timestamp_before_create
-        self.created_at = Time.utc
-      end
-
-      # Method to set updated_at on every save (called by save before insert/update)
-      # Uses _ralph_timestamp_ prefix so macro finished can detect and call it
-      private def _ralph_timestamp_before_save
-        self.updated_at = Time.utc
-      end
-    end
-
     # Define a column on the model
     macro column(name, type, primary = false, default = nil)
       {% if primary %}
@@ -480,7 +441,11 @@ module Ralph
 
         # Create type alias for associations to reference at compile time
         # This allows belongs_to/has_many to infer foreign key types automatically
-        alias PrimaryKeyType = {{type}}
+        # Only define if not already defined by parent class with same type
+        {% unless @type.has_constant?("PRIMARY_KEY_TYPE_DEFINED") %}
+          PRIMARY_KEY_TYPE_DEFINED = true
+          alias PrimaryKeyType = {{type}}
+        {% end %}
       {% end %}
 
       # Register column metadata
