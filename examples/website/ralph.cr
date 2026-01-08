@@ -2,12 +2,12 @@
 
 require "ralph"
 require "ralph/backends/sqlite"
-require "./src/migrations/*"
+require "./db/migrations/*"
 
 # Set default database URL for this project
 ENV["DATABASE_URL"] ||= "sqlite3://./blog.sqlite3"
 
 Ralph::Cli::Runner.new(
-  migrations_dir: "./src/migrations",
+  migrations_dir: "./db/migrations",
   models_dir: "./src/models"
 ).run

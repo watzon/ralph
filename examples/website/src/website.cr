@@ -5,10 +5,7 @@ require "./models/user"
 require "./models/post"
 require "./models/comment"
 
-# Load migrations
-require "./migrations/*"
-
-# Load configuration (Ralph, sessions, run migrations)
+# Load configuration (Ralph, sessions)
 require "./config"
 
 # Load views (depends on models being loaded)

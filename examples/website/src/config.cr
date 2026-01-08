@@ -8,10 +8,6 @@ Ralph.configure do |config|
   config.database = Ralph::Database::SqliteBackend.new("sqlite3://./blog.sqlite3")
 end
 
-# Run migrations on startup
-migrator = Ralph::Migrations::Migrator.new(Ralph.database)
-migrator.migrate
-
 # Configure sessions
 Kemal::Session.config do |config|
   config.cookie_name = "blog_session"
