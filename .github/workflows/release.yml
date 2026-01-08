@@ -1,9 +1,0 @@
-name: Release
-
-on:
-  release:
-    types: [published]
-
-jobs:
-  ci:
-    uses: ./.github/workflows/ci.yml
