@@ -1,15 +1,34 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Crystal
 /lib/
 /bin/
 /.shards/
 *.dwarf
-/site/
-.cache
 
 # Libraries don't need dependency lock
-# Dependencies will be locked in applications that use them
 /shard.lock
 
-# AI Shit
+# Generated docs
+/site/
+
+# Build artifacts
+.cache/
+*.log
+
+# Database files (dev/test)
+*.sqlite3
+*.db
+
+# Editor/IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# AI assistants
 CLAUDE.md
 AGENTS.md
 GEMINI.md
@@ -19,3 +38,8 @@ GEMINI.md
 .cursor/
 .windsurf/
 .mcp.json
+.aider*
+.continue/
+
+# Development notes (public roadmap is in docs/)
+/ROADMAP.md
