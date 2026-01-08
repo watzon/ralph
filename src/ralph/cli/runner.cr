@@ -106,7 +106,6 @@ module Ralph
         Generator commands:
           g:migration NAME             Create a new migration
           g:model NAME                 Generate a model with migration
-          g:scaffold NAME              Generate full CRUD (model, views, etc.)
 
         Options:
           -e, --env ENV          Environment (default: development)
@@ -185,7 +184,7 @@ module Ralph
       private def handle_generate_command(args : Array(String))
         if args.empty?
           @output.puts "Error: generate command requires a subcommand"
-          @output.puts "Available subcommands: migration, model, scaffold"
+          @output.puts "Available subcommands: migration, model"
           exit 1
         end
 
@@ -234,15 +233,6 @@ module Ralph
           name = non_flag_args[0]
           fields = non_flag_args[1..]
           generate_model(name, fields)
-        when "scaffold"
-          if non_flag_args.empty?
-            @output.puts "Error: scaffold name required"
-            @output.puts "Usage: ralph g:scaffold NAME [field:type ...] [-m DIR] [--models DIR]"
-            exit 1
-          end
-          name = non_flag_args[0]
-          fields = non_flag_args[1..]
-          generate_scaffold(name, fields)
         else
           @output.puts "Unknown generate command: #{subcommand}"
           exit 1
@@ -584,12 +574,6 @@ module Ralph
       # Generate a model with migration
       private def generate_model(name : String, fields : Array(String))
         generator = Generators::ModelGenerator.new(name, fields, @models_dir, @migrations_dir)
-        generator.run
-      end
-
-      # Generate a full scaffold
-      private def generate_scaffold(name : String, fields : Array(String))
-        generator = Generators::ScaffoldGenerator.new(name, fields, @models_dir, @migrations_dir)
         generator.run
       end
 

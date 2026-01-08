@@ -41,8 +41,8 @@ ralph/
 │       │   ├── uuid.cr       # CHAR(36) / native UUID
 │       │   └── json.cr       # TEXT / JSONB
 │       ├── cli/
-│       │   ├── runner.cr     # Command dispatch (509 lines)
-│       │   └── generators/   # Model/scaffold templates
+│       │   ├── runner.cr     # Command dispatch
+│       │   └── generators/   # Model generator
 │       └── backends/
 │           ├── sqlite.cr     # SQLite implementation
 │           └── postgres.cr   # PostgreSQL implementation
@@ -289,7 +289,6 @@ ralph db:status       # Show migration status
 ralph db:reset        # Drop, create, migrate, seed
 ralph g:migration N   # Generate migration
 ralph g:model N F:T   # Generate model with fields
-ralph g:scaffold N    # Generate full CRUD
 ```
 
 ## TESTING

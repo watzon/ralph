@@ -221,16 +221,6 @@ Generates a model file and an accompanying migration.
 ./ralph.cr g:model User name:string email:string
 ```
 
-### `g:scaffold`
-
-Generates a complete CRUD scaffold including model, migration, and views.
-
-**Usage:**
-
-```bash
-./ralph.cr g:scaffold NAME [field:type ...]
-```
-
 ---
 
 ## Global Options

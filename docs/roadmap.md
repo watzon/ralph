@@ -45,7 +45,7 @@ Ralph is feature-complete for most common ORM use cases. The core is stable and 
 
 ### CLI
 - **Database** - create, migrate, rollback, status, reset, setup, seed
-- **Generators** - migration, model, scaffold
+- **Generators** - migration, model
 
 ---
 

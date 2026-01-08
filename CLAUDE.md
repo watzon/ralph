@@ -43,7 +43,6 @@ ralph db:setup           # Create database and run migrations
 # Generators
 ralph g:migration NAME              # Create a new migration
 ralph g:model NAME field:type ...   # Generate model with migration
-ralph g:scaffold NAME field:type ...  # Generate full CRUD
 ```
 
 ## Architecture
@@ -76,7 +75,7 @@ ralph g:scaffold NAME field:type ...  # Generate full CRUD
 
 - **Entry point**: `src/bin/ralph.cr`
 - **Runner**: `src/ralph/cli/runner.cr` — Handles command parsing and dispatching
-- **Generators**: `src/ralph/cli/generators/` — Model and scaffold generators
+- **Generators**: `src/ralph/cli/generators/` — Model generator
 
 ## Key Patterns
 
