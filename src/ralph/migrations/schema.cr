@@ -12,6 +12,13 @@ module Ralph
         @foreign_keys : Array(ForeignKeyDefinition) = [] of ForeignKeyDefinition
         @dialect : Dialect::Base
 
+        # PostgreSQL-specific indexes
+        @gin_indexes : Array(GinIndexDefinition) = [] of GinIndexDefinition
+        @gist_indexes : Array(GistIndexDefinition) = [] of GistIndexDefinition
+        @full_text_indexes : Array(FullTextIndexDefinition) = [] of FullTextIndexDefinition
+        @partial_indexes : Array(PartialIndexDefinition) = [] of PartialIndexDefinition
+        @expression_indexes : Array(ExpressionIndexDefinition) = [] of ExpressionIndexDefinition
+
         def initialize(@name : String, @dialect : Dialect::Base = Dialect.current)
         end
 
@@ -414,6 +421,149 @@ module Ralph
           )
         end
 
+        # ========================================
+        # PostgreSQL-Specific Index Methods
+        # ========================================
+
+        # Add a GIN index (Generalized Inverted Index)
+        #
+        # GIN indexes are ideal for:
+        # - JSONB containment queries
+        # - Array overlap/containment
+        # - Full-text search
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :posts do |t|
+        #   t.jsonb :metadata
+        #   t.string_array :tags
+        #   t.gin_index :metadata
+        #   t.gin_index :tags, name: "idx_posts_tags_gin"
+        # end
+        # ```
+        #
+        # ## Options
+        #
+        # - **name**: Custom index name (auto-generated if not provided)
+        # - **fastupdate**: Use fast update optimization (default: true). Set to false for better search performance at cost of slower writes.
+        def gin_index(column : String, name : String? = nil, fastupdate : Bool = true)
+          index_name = name || "index_#{@name}_on_#{column}_gin"
+          @gin_indexes << GinIndexDefinition.new(@name, column, index_name, fastupdate)
+        end
+
+        # Add a GiST index (Generalized Search Tree)
+        #
+        # GiST indexes are ideal for:
+        # - Geometric data types
+        # - Range types
+        # - Nearest-neighbor searches
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :locations do |t|
+        #   t.float :latitude
+        #   t.float :longitude
+        #   t.gist_index "latitude", name: "idx_lat_gist"
+        # end
+        # ```
+        def gist_index(column : String, name : String? = nil)
+          index_name = name || "index_#{@name}_on_#{column}_gist"
+          @gist_indexes << GistIndexDefinition.new(@name, column, index_name)
+        end
+
+        # Add a GiST index on multiple columns
+        def gist_index(columns : Array(String), name : String? = nil)
+          index_name = name || "index_#{@name}_on_#{columns.join("_")}_gist"
+          @gist_indexes << GistIndexDefinition.new(@name, columns, index_name)
+        end
+
+        # Add a full-text search index (GIN on tsvector)
+        #
+        # Creates a GIN index on a tsvector expression for efficient full-text search.
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :articles do |t|
+        #   t.string :title
+        #   t.text :content
+        #
+        #   # Single column
+        #   t.full_text_index :title
+        #
+        #   # Multiple columns
+        #   t.full_text_index [:title, :content], config: "english"
+        # end
+        # ```
+        #
+        # ## Options
+        #
+        # - **config**: Text search configuration (default: "english")
+        # - **name**: Custom index name
+        # - **fastupdate**: Use fast update optimization (default: true)
+        def full_text_index(column : String, config : String = "english", name : String? = nil, fastupdate : Bool = true)
+          index_name = name || "index_#{@name}_on_#{column}_fts"
+          @full_text_indexes << FullTextIndexDefinition.new(@name, column, index_name, config, fastupdate)
+        end
+
+        # Add a full-text search index on multiple columns
+        def full_text_index(columns : Array(String), config : String = "english", name : String? = nil, fastupdate : Bool = true)
+          index_name = name || "index_#{@name}_on_#{columns.join("_")}_fts"
+          @full_text_indexes << FullTextIndexDefinition.new(@name, columns, index_name, config, fastupdate)
+        end
+
+        # Add a partial index (index with WHERE condition)
+        #
+        # Partial indexes only index rows matching the WHERE condition.
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :users do |t|
+        #   t.string :email
+        #   t.boolean :active
+        #
+        #   # Only index active users' emails
+        #   t.partial_index :email, condition: "active = true", unique: true
+        # end
+        # ```
+        #
+        # ## Options
+        #
+        # - **condition**: SQL WHERE clause (required)
+        # - **name**: Custom index name
+        # - **unique**: Create unique index (default: false)
+        def partial_index(column : String, condition : String, name : String? = nil, unique : Bool = false)
+          index_name = name || "index_#{@name}_on_#{column}_partial"
+          @partial_indexes << PartialIndexDefinition.new(@name, column, index_name, condition, unique)
+        end
+
+        # Add an expression index
+        #
+        # Expression indexes index the result of an expression rather than a column.
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :users do |t|
+        #   t.string :email
+        #
+        #   # Case-insensitive email lookup
+        #   t.expression_index "lower(email)", name: "idx_users_email_lower", unique: true
+        # end
+        # ```
+        #
+        # ## Options
+        #
+        # - **name**: Index name (required)
+        # - **unique**: Create unique index (default: false)
+        # - **using**: Index method (e.g., "btree", "hash", "gin", "gist")
+        def expression_index(expression : String, name : String, unique : Bool = false, using : String? = nil)
+          @expression_indexes << ExpressionIndexDefinition.new(@name, expression, name, unique, using)
+        end
+
         def to_sql : String
           all_columns = [] of String
 
@@ -444,6 +594,22 @@ module Ralph
 
         getter indexes : Array(IndexDefinition)
         getter foreign_keys : Array(ForeignKeyDefinition)
+        getter gin_indexes : Array(GinIndexDefinition)
+        getter gist_indexes : Array(GistIndexDefinition)
+        getter full_text_indexes : Array(FullTextIndexDefinition)
+        getter partial_indexes : Array(PartialIndexDefinition)
+        getter expression_indexes : Array(ExpressionIndexDefinition)
+
+        # Get all PostgreSQL-specific indexes
+        def postgres_indexes : Array(GinIndexDefinition | GistIndexDefinition | FullTextIndexDefinition | PartialIndexDefinition | ExpressionIndexDefinition)
+          result = [] of GinIndexDefinition | GistIndexDefinition | FullTextIndexDefinition | PartialIndexDefinition | ExpressionIndexDefinition
+          result.concat(@gin_indexes)
+          result.concat(@gist_indexes)
+          result.concat(@full_text_indexes)
+          result.concat(@partial_indexes)
+          result.concat(@expression_indexes)
+          result
+        end
       end
 
       class ColumnDefinition
@@ -560,6 +726,190 @@ module Ralph
           when :set_default then "SET DEFAULT"
           else                   "NO ACTION"
           end
+        end
+      end
+
+      # ========================================
+      # PostgreSQL-Specific Index Definitions
+      # ========================================
+
+      # Represents a GIN (Generalized Inverted Index) index
+      #
+      # GIN indexes are optimized for searching within complex data types:
+      # - JSONB containment queries (@>, ?, ?|, ?&)
+      # - Array overlap/containment (&&, @>, <@)
+      # - Full-text search (@@)
+      #
+      # ## Example
+      #
+      # ```
+      # create_table :posts do |t|
+      #   t.jsonb :metadata
+      #   t.gin_index :metadata
+      # end
+      # ```
+      class GinIndexDefinition
+        getter table : String
+        getter column : String
+        getter name : String
+        getter fastupdate : Bool
+
+        def initialize(@table : String, @column : String, @name : String, @fastupdate : Bool = true)
+        end
+
+        def to_sql : String
+          storage_param = @fastupdate ? "" : " WITH (fastupdate = off)"
+          "CREATE INDEX IF NOT EXISTS \"#{@name}\" ON \"#{@table}\" USING gin(\"#{@column}\")#{storage_param}"
+        end
+
+        def to_drop_sql : String
+          "DROP INDEX IF EXISTS \"#{@name}\""
+        end
+      end
+
+      # Represents a GiST (Generalized Search Tree) index
+      #
+      # GiST indexes are optimized for:
+      # - Geometric data types (point, circle, polygon)
+      # - Range types
+      # - Full-text search (alternative to GIN)
+      # - Nearest-neighbor searches
+      #
+      # ## Example
+      #
+      # ```
+      # create_table :locations do |t|
+      #   t.float :latitude
+      #   t.float :longitude
+      #   t.gist_index [:latitude, :longitude]
+      # end
+      # ```
+      class GistIndexDefinition
+        getter table : String
+        getter columns : Array(String)
+        getter name : String
+
+        def initialize(@table : String, columns : String | Array(String), @name : String)
+          @columns = columns.is_a?(Array) ? columns : [columns]
+        end
+
+        def to_sql : String
+          cols = @columns.map { |c| "\"#{c}\"" }.join(", ")
+          "CREATE INDEX IF NOT EXISTS \"#{@name}\" ON \"#{@table}\" USING gist(#{cols})"
+        end
+
+        def to_drop_sql : String
+          "DROP INDEX IF EXISTS \"#{@name}\""
+        end
+      end
+
+      # Represents a full-text search GIN index
+      #
+      # Creates a GIN index on a tsvector expression for efficient full-text search.
+      #
+      # ## Example
+      #
+      # ```
+      # create_table :articles do |t|
+      #   t.string :title
+      #   t.text :content
+      #   t.full_text_index :title
+      #   t.full_text_index [:title, :content], config: "english"
+      # end
+      # ```
+      class FullTextIndexDefinition
+        getter table : String
+        getter columns : Array(String)
+        getter name : String
+        getter config : String
+        getter fastupdate : Bool
+
+        def initialize(@table : String, columns : String | Array(String), @name : String, @config : String = "english", @fastupdate : Bool = true)
+          @columns = columns.is_a?(Array) ? columns : [columns]
+        end
+
+        def to_sql : String
+          expression = if @columns.size == 1
+                         "to_tsvector('#{@config}', \"#{@columns.first}\")"
+                       else
+                         coalesced = @columns.map { |c| "coalesce(\"#{c}\", '')" }.join(" || ' ' || ")
+                         "to_tsvector('#{@config}', #{coalesced})"
+                       end
+          storage_param = @fastupdate ? "" : " WITH (fastupdate = off)"
+          "CREATE INDEX IF NOT EXISTS \"#{@name}\" ON \"#{@table}\" USING gin(#{expression})#{storage_param}"
+        end
+
+        def to_drop_sql : String
+          "DROP INDEX IF EXISTS \"#{@name}\""
+        end
+      end
+
+      # Represents a partial index (index with WHERE condition)
+      #
+      # Partial indexes only index rows matching the WHERE condition,
+      # making them smaller and faster for specific queries.
+      #
+      # ## Example
+      #
+      # ```
+      # # Only index active users
+      # add_partial_index :users, :email, condition: "active = true"
+      #
+      # # Only index published posts
+      # add_partial_index :posts, :title, condition: "status = 'published'"
+      # ```
+      class PartialIndexDefinition
+        getter table : String
+        getter column : String
+        getter name : String
+        getter condition : String
+        getter unique : Bool
+
+        def initialize(@table : String, @column : String, @name : String, @condition : String, @unique : Bool = false)
+        end
+
+        def to_sql : String
+          unique_sql = @unique ? "UNIQUE " : ""
+          "CREATE #{unique_sql}INDEX IF NOT EXISTS \"#{@name}\" ON \"#{@table}\" (\"#{@column}\") WHERE #{@condition}"
+        end
+
+        def to_drop_sql : String
+          "DROP INDEX IF EXISTS \"#{@name}\""
+        end
+      end
+
+      # Represents an expression index
+      #
+      # Expression indexes index the result of an expression rather than a column.
+      # Useful for case-insensitive searches, computed values, etc.
+      #
+      # ## Example
+      #
+      # ```
+      # # Case-insensitive email lookup
+      # add_expression_index :users, "lower(email)", name: "idx_users_email_lower"
+      #
+      # # Index on extracted year
+      # add_expression_index :orders, "extract(year from created_at)", name: "idx_orders_year"
+      # ```
+      class ExpressionIndexDefinition
+        getter table : String
+        getter expression : String
+        getter name : String
+        getter unique : Bool
+        getter using : String?
+
+        def initialize(@table : String, @expression : String, @name : String, @unique : Bool = false, @using : String? = nil)
+        end
+
+        def to_sql : String
+          unique_sql = @unique ? "UNIQUE " : ""
+          using_sql = @using ? " USING #{@using}" : ""
+          "CREATE #{unique_sql}INDEX IF NOT EXISTS \"#{@name}\" ON \"#{@table}\"#{using_sql} (#{@expression})"
+        end
+
+        def to_drop_sql : String
+          "DROP INDEX IF EXISTS \"#{@name}\""
         end
       end
     end

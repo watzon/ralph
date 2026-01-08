@@ -1008,6 +1008,784 @@ module Ralph
       end
 
       # ========================================
+      # PostgreSQL Full-Text Search Methods
+      # ========================================
+
+      # Basic full-text search using @@ operator
+      #
+      # Uses plainto_tsquery for simple search (automatically tokenizes).
+      # Supports any PostgreSQL text search configuration.
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_search("title", "crystal orm")
+      # # SQL: WHERE to_tsvector('english', "title") @@ plainto_tsquery('english', 'crystal orm')
+      #
+      # query.where_search("content", "programming", config: "simple")
+      # # SQL: WHERE to_tsvector('simple', "content") @@ plainto_tsquery('simple', 'programming')
+      # ```
+      #
+      # ## Language Configurations
+      #
+      # Common configs: 'english', 'simple', 'french', 'german', 'spanish', etc.
+      # Use `PostgresBackend#available_text_search_configs` to list all available configs.
+      #
+      # ## Backend Requirement
+      #
+      # Raises `Ralph::BackendError` if not using PostgreSQL backend.
+      def where_search(column : String, query : String, config : String = "english") : Builder
+        ensure_postgres!("Full-text search")
+        clause = "to_tsvector('#{config}', \"#{column}\") @@ plainto_tsquery('#{config}', ?)"
+        with_wheres(@wheres + [WhereClause.new(clause, [query] of DBValue)])
+      end
+
+      # Multi-column full-text search
+      #
+      # Combines multiple columns into a single tsvector for searching.
+      # NULL values are safely handled with coalesce.
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_search_multi(["title", "content"], "ruby framework")
+      # # SQL: WHERE to_tsvector('english', coalesce("title", '') || ' ' || coalesce("content", ''))
+      # #        @@ plainto_tsquery('english', 'ruby framework')
+      # ```
+      def where_search_multi(columns : Array(String), query : String, config : String = "english") : Builder
+        ensure_postgres!("Full-text search")
+        coalesced = columns.map { |c| "coalesce(\"#{c}\", '')" }.join(" || ' ' || ")
+        clause = "to_tsvector('#{config}', #{coalesced}) @@ plainto_tsquery('#{config}', ?)"
+        with_wheres(@wheres + [WhereClause.new(clause, [query] of DBValue)])
+      end
+
+      # Full-text search using websearch_to_tsquery (PostgreSQL 11+)
+      #
+      # Parses search queries using web search syntax:
+      # - Unquoted words are combined with AND
+      # - "quoted phrases" are treated as phrases
+      # - OR connects alternatives
+      # - -word excludes words
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_websearch("content", "crystal -ruby \"web framework\"")
+      # # Finds documents with "crystal" AND "web framework" but NOT "ruby"
+      # ```
+      def where_websearch(column : String, query : String, config : String = "english") : Builder
+        ensure_postgres!("Web search")
+        clause = "to_tsvector('#{config}', \"#{column}\") @@ websearch_to_tsquery('#{config}', ?)"
+        with_wheres(@wheres + [WhereClause.new(clause, [query] of DBValue)])
+      end
+
+      # Full-text search using phrase matching (PostgreSQL 9.6+)
+      #
+      # Matches exact phrases where words must appear consecutively.
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_phrase_search("content", "web framework")
+      # # Only matches "web framework", not "web application framework"
+      # ```
+      def where_phrase_search(column : String, query : String, config : String = "english") : Builder
+        ensure_postgres!("Phrase search")
+        clause = "to_tsvector('#{config}', \"#{column}\") @@ phraseto_tsquery('#{config}', ?)"
+        with_wheres(@wheres + [WhereClause.new(clause, [query] of DBValue)])
+      end
+
+      # Order by full-text search rank (relevance score)
+      #
+      # Higher rank = more relevant match. Must be used with a search query.
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_search("title", "crystal")
+      #      .order_by_search_rank("title", "crystal")
+      # # Orders results by relevance to "crystal"
+      # ```
+      #
+      # ## Normalization Options (via normalization parameter)
+      #
+      # - 0: Default (ignores document length)
+      # - 1: Divides rank by 1 + document length logarithm
+      # - 2: Divides rank by document length
+      # - 4: Divides rank by mean harmonic distance between extents
+      # - 8: Divides rank by number of unique words
+      # - 16: Divides rank by 1 + document length logarithm (different formula)
+      # - 32: Divides rank by document length + 1
+      #
+      # Combine with bitwise OR: `normalization: 1 | 4`
+      def order_by_search_rank(column : String, query : String, config : String = "english", normalization : Int32 = 0) : Builder
+        ensure_postgres!("Search rank")
+        # Add rank to SELECT and ORDER BY it
+        rank_select = "ts_rank(to_tsvector('#{config}', \"#{column}\"), plainto_tsquery('#{config}', '#{query.gsub("'", "''")}'), #{normalization}) AS \"search_rank\""
+        new_builder = with_selects(@selects + [rank_select])
+        new_builder.order("search_rank", :desc)
+      end
+
+      # Order by full-text search rank with cover density
+      #
+      # Similar to `order_by_search_rank` but also considers proximity of search terms.
+      # Uses ts_rank_cd which gives higher scores when matching terms are closer together.
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_search("content", "crystal programming")
+      #      .order_by_search_rank_cd("content", "crystal programming")
+      # ```
+      def order_by_search_rank_cd(column : String, query : String, config : String = "english", normalization : Int32 = 0) : Builder
+        ensure_postgres!("Search rank with cover density")
+        rank_select = "ts_rank_cd(to_tsvector('#{config}', \"#{column}\"), plainto_tsquery('#{config}', '#{query.gsub("'", "''")}'), #{normalization}) AS \"search_rank\""
+        new_builder = with_selects(@selects + [rank_select])
+        new_builder.order("search_rank", :desc)
+      end
+
+      # Select search headline (highlighted excerpt with matching terms)
+      #
+      # Generates a short excerpt with search terms highlighted using HTML tags.
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_search("content", "crystal")
+      #      .select_search_headline("content", "crystal")
+      # # Returns content like: "Learn about <b>Crystal</b> programming language"
+      # ```
+      #
+      # ## Options
+      #
+      # - **max_words**: Maximum words in headline (default: 35)
+      # - **min_words**: Minimum words in headline (default: 15)
+      # - **short_word**: Ignore words shorter than this (default: 3)
+      # - **highlight_all**: Highlight all occurrences, not just best (default: false)
+      # - **max_fragments**: Maximum number of excerpts (default: 0 = unlimited)
+      # - **start_tag**: Opening tag for highlights (default: "<b>")
+      # - **stop_tag**: Closing tag for highlights (default: "</b>")
+      # - **fragment_delimiter**: Text between fragments (default: " ... ")
+      def select_search_headline(
+        column : String,
+        query : String,
+        config : String = "english",
+        max_words : Int32 = 35,
+        min_words : Int32 = 15,
+        short_word : Int32 = 3,
+        highlight_all : Bool = false,
+        max_fragments : Int32 = 0,
+        start_tag : String = "<b>",
+        stop_tag : String = "</b>",
+        fragment_delimiter : String = " ... ",
+        as alias_name : String = "headline"
+      ) : Builder
+        ensure_postgres!("Search headline")
+
+        options = [
+          "MaxWords=#{max_words}",
+          "MinWords=#{min_words}",
+          "ShortWord=#{short_word}",
+          "HighlightAll=#{highlight_all ? "TRUE" : "FALSE"}",
+          "MaxFragments=#{max_fragments}",
+          "StartSel=#{start_tag}",
+          "StopSel=#{stop_tag}",
+          "FragmentDelimiter=#{fragment_delimiter}",
+        ].join(", ")
+
+        headline_select = "ts_headline('#{config}', \"#{column}\", plainto_tsquery('#{config}', '#{query.gsub("'", "''")}'), '#{options}') AS \"#{alias_name}\""
+        with_selects(@selects + [headline_select])
+      end
+
+      # ========================================
+      # PostgreSQL Date/Time Functions
+      # ========================================
+
+      # Compare column to NOW()
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_before_now("expires_at")
+      # # SQL: WHERE "expires_at" < NOW()
+      #
+      # query.where_after_now("start_date")
+      # # SQL: WHERE "start_date" > NOW()
+      # ```
+      def where_before_now(column : String) : Builder
+        ensure_postgres!("NOW() function")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" < NOW()", [] of DBValue)])
+      end
+
+      def where_after_now(column : String) : Builder
+        ensure_postgres!("NOW() function")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" > NOW()", [] of DBValue)])
+      end
+
+      # Compare column to NOW() with custom operator
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_now("updated_at", ">=")
+      # # SQL: WHERE "updated_at" >= NOW()
+      # ```
+      def where_now(column : String, operator : String = "=") : Builder
+        ensure_postgres!("NOW() function")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" #{operator} NOW()", [] of DBValue)])
+      end
+
+      # Compare column to CURRENT_TIMESTAMP
+      #
+      # CURRENT_TIMESTAMP is SQL standard and returns the same value throughout a transaction.
+      # NOW() is PostgreSQL-specific and also returns a constant within a transaction.
+      def where_current_timestamp(column : String, operator : String = "=") : Builder
+        ensure_postgres!("CURRENT_TIMESTAMP")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" #{operator} CURRENT_TIMESTAMP", [] of DBValue)])
+      end
+
+      # Select NOW() as a column
+      #
+      # ## Example
+      #
+      # ```
+      # query.select_now("server_time")
+      # # SQL: SELECT NOW() AS "server_time"
+      # ```
+      def select_now(as alias_name : String = "now") : Builder
+        ensure_postgres!("NOW() function")
+        with_selects(@selects + ["NOW() AS \"#{alias_name}\""])
+      end
+
+      # Select CURRENT_TIMESTAMP
+      def select_current_timestamp(as alias_name : String = "current_timestamp") : Builder
+        ensure_postgres!("CURRENT_TIMESTAMP")
+        with_selects(@selects + ["CURRENT_TIMESTAMP AS \"#{alias_name}\""])
+      end
+
+      # Compare column age (interval since timestamp)
+      #
+      # The age() function calculates the interval between now and the given timestamp.
+      #
+      # ## Example
+      #
+      # ```
+      # # Find records created more than 7 days ago
+      # query.where_age("created_at", ">", "7 days")
+      #
+      # # Find records updated within the last hour
+      # query.where_age("updated_at", "<", "1 hour")
+      # ```
+      #
+      # ## Interval Format
+      #
+      # PostgreSQL interval format: '1 year 2 months 3 days 4 hours 5 minutes 6 seconds'
+      # Also accepts: '1 week', '30 days', '2 hours', etc.
+      def where_age(column : String, operator : String, interval : String) : Builder
+        ensure_postgres!("age() function")
+        with_wheres(@wheres + [WhereClause.new("age(\"#{column}\") #{operator} interval '#{interval}'", [] of DBValue)])
+      end
+
+      # Convenience methods for common age comparisons
+      def where_age_greater_than(column : String, interval : String) : Builder
+        where_age(column, ">", interval)
+      end
+
+      def where_age_less_than(column : String, interval : String) : Builder
+        where_age(column, "<", interval)
+      end
+
+      def where_older_than(column : String, interval : String) : Builder
+        where_age(column, ">", interval)
+      end
+
+      def where_newer_than(column : String, interval : String) : Builder
+        where_age(column, "<", interval)
+      end
+
+      # Date truncation (round down to precision)
+      #
+      # Truncates a timestamp to the specified precision level.
+      #
+      # ## Supported Precisions
+      #
+      # microseconds, milliseconds, second, minute, hour, day, week,
+      # month, quarter, year, decade, century, millennium
+      #
+      # ## Example
+      #
+      # ```
+      # # Find records created on a specific day
+      # query.where_date_trunc("day", "created_at", "2024-01-15")
+      #
+      # # Group by month
+      # query.select_date_trunc("month", "created_at", as: "month").group("month")
+      # ```
+      def where_date_trunc(precision : String, column : String, value : String | Time) : Builder
+        ensure_postgres!("date_trunc() function")
+        value_str = value.is_a?(Time) ? value.to_s("%Y-%m-%d %H:%M:%S") : value.to_s
+        with_wheres(@wheres + [WhereClause.new("date_trunc('#{precision}', \"#{column}\") = '#{value_str}'", [] of DBValue)])
+      end
+
+      # Select date-truncated column
+      def select_date_trunc(precision : String, column : String, as alias_name : String) : Builder
+        ensure_postgres!("date_trunc() function")
+        with_selects(@selects + ["date_trunc('#{precision}', \"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Extract date/time component
+      #
+      # Extracts a specific part from a timestamp.
+      #
+      # ## Supported Parts
+      #
+      # century, day, decade, dow (day of week), doy (day of year), epoch,
+      # hour, isodow, isoyear, microseconds, millennium, milliseconds,
+      # minute, month, quarter, second, timezone, timezone_hour,
+      # timezone_minute, week, year
+      #
+      # ## Example
+      #
+      # ```
+      # # Find records from 2024
+      # query.where_extract("year", "created_at", 2024)
+      #
+      # # Find records from January
+      # query.where_extract("month", "created_at", 1)
+      # ```
+      def where_extract(part : String, column : String, value : Int32) : Builder
+        ensure_postgres!("extract() function")
+        with_wheres(@wheres + [WhereClause.new("EXTRACT(#{part} FROM \"#{column}\") = #{value}", [] of DBValue)])
+      end
+
+      # Select extracted date/time component
+      def select_extract(part : String, column : String, as alias_name : String) : Builder
+        ensure_postgres!("extract() function")
+        with_selects(@selects + ["EXTRACT(#{part} FROM \"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Filter by date range relative to now
+      #
+      # ## Example
+      #
+      # ```
+      # # Records from the last 7 days
+      # query.where_within_last("created_at", "7 days")
+      #
+      # # Records from the last 2 hours
+      # query.where_within_last("updated_at", "2 hours")
+      # ```
+      def where_within_last(column : String, interval : String) : Builder
+        ensure_postgres!("Interval calculation")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" > NOW() - interval '#{interval}'", [] of DBValue)])
+      end
+
+      # ========================================
+      # PostgreSQL UUID Functions
+      # ========================================
+
+      # Select gen_random_uuid() as a column
+      #
+      # Generates a random UUID v4.
+      #
+      # ## Example
+      #
+      # ```
+      # query.select_random_uuid("new_id")
+      # # SQL: SELECT gen_random_uuid() AS "new_id"
+      # ```
+      def select_random_uuid(as alias_name : String = "uuid") : Builder
+        ensure_postgres!("gen_random_uuid() function")
+        with_selects(@selects + ["gen_random_uuid() AS \"#{alias_name}\""])
+      end
+
+      # ========================================
+      # PostgreSQL String Functions
+      # ========================================
+
+      # String concatenation comparison
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_concat("first_name", "last_name", "John Doe")
+      # # SQL: WHERE "first_name" || ' ' || "last_name" = 'John Doe'
+      # ```
+      def where_concat(column1 : String, column2 : String, value : String, separator : String = " ") : Builder
+        ensure_postgres!("String concatenation")
+        clause = "\"#{column1}\" || '#{separator}' || \"#{column2}\" = ?"
+        with_wheres(@wheres + [WhereClause.new(clause, [value] of DBValue)])
+      end
+
+      # Regular expression match (case-sensitive)
+      #
+      # Uses PostgreSQL's ~ operator for POSIX regex matching.
+      #
+      # ## Example
+      #
+      # ```
+      # # Match usernames that start with a letter and contain only alphanumerics
+      # query.where_regex("username", "^[a-zA-Z][a-zA-Z0-9_]*$")
+      #
+      # # Match email pattern
+      # query.where_regex("email", "^[^@]+@[^@]+\\.[^@]+$")
+      # ```
+      def where_regex(column : String, pattern : String) : Builder
+        ensure_postgres!("Regex operator (~)")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" ~ ?", [pattern] of DBValue)])
+      end
+
+      # Case-insensitive regular expression match
+      #
+      # Uses PostgreSQL's ~* operator.
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_regex_i("name", "john")
+      # # Matches "John", "JOHN", "john", etc.
+      # ```
+      def where_regex_i(column : String, pattern : String) : Builder
+        ensure_postgres!("Case-insensitive regex operator (~*)")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" ~* ?", [pattern] of DBValue)])
+      end
+
+      # Regular expression not match (case-sensitive)
+      def where_not_regex(column : String, pattern : String) : Builder
+        ensure_postgres!("Regex not-match operator (!~)")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" !~ ?", [pattern] of DBValue)])
+      end
+
+      # Case-insensitive regular expression not match
+      def where_not_regex_i(column : String, pattern : String) : Builder
+        ensure_postgres!("Case-insensitive regex not-match operator (!~*)")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" !~* ?", [pattern] of DBValue)])
+      end
+
+      # String length comparison
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_length("name", ">", 5)
+      # # SQL: WHERE length("name") > 5
+      # ```
+      def where_length(column : String, operator : String, length : Int32) : Builder
+        ensure_postgres!("length() function")
+        with_wheres(@wheres + [WhereClause.new("length(\"#{column}\") #{operator} #{length}", [] of DBValue)])
+      end
+
+      # Select string length
+      def select_length(column : String, as alias_name : String = "length") : Builder
+        ensure_postgres!("length() function")
+        with_selects(@selects + ["length(\"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Convert to lowercase comparison
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_lower("email", "test@example.com")
+      # # SQL: WHERE lower("email") = 'test@example.com'
+      # ```
+      def where_lower(column : String, value : String) : Builder
+        ensure_postgres!("lower() function")
+        with_wheres(@wheres + [WhereClause.new("lower(\"#{column}\") = ?", [value] of DBValue)])
+      end
+
+      # Select lowercase column
+      def select_lower(column : String, as alias_name : String) : Builder
+        ensure_postgres!("lower() function")
+        with_selects(@selects + ["lower(\"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Convert to uppercase comparison
+      def where_upper(column : String, value : String) : Builder
+        ensure_postgres!("upper() function")
+        with_wheres(@wheres + [WhereClause.new("upper(\"#{column}\") = ?", [value] of DBValue)])
+      end
+
+      # Select uppercase column
+      def select_upper(column : String, as alias_name : String) : Builder
+        ensure_postgres!("upper() function")
+        with_selects(@selects + ["upper(\"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Trim whitespace comparison
+      def where_trim(column : String, value : String) : Builder
+        ensure_postgres!("trim() function")
+        with_wheres(@wheres + [WhereClause.new("trim(\"#{column}\") = ?", [value] of DBValue)])
+      end
+
+      # Substring comparison
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_substring("code", 1, 3, "ABC")
+      # # SQL: WHERE substring("code" from 1 for 3) = 'ABC'
+      # ```
+      def where_substring(column : String, start : Int32, length : Int32, value : String) : Builder
+        ensure_postgres!("substring() function")
+        with_wheres(@wheres + [WhereClause.new("substring(\"#{column}\" from #{start} for #{length}) = ?", [value] of DBValue)])
+      end
+
+      # Select substring
+      def select_substring(column : String, start : Int32, length : Int32, as alias_name : String) : Builder
+        ensure_postgres!("substring() function")
+        with_selects(@selects + ["substring(\"#{column}\" from #{start} for #{length}) AS \"#{alias_name}\""])
+      end
+
+      # String replacement
+      #
+      # ## Example
+      #
+      # ```
+      # query.select_replace("email", "@example.com", "@test.com", as: "test_email")
+      # # SQL: SELECT replace("email", '@example.com', '@test.com') AS "test_email"
+      # ```
+      def select_replace(column : String, from : String, to : String, as alias_name : String) : Builder
+        ensure_postgres!("replace() function")
+        with_selects(@selects + ["replace(\"#{column}\", '#{from.gsub("'", "''")}', '#{to.gsub("'", "''")}') AS \"#{alias_name}\""])
+      end
+
+      # Starts with comparison (uses efficient index if available)
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_starts_with("name", "John")
+      # # SQL: WHERE "name" LIKE 'John%'
+      # ```
+      def where_starts_with(column : String, prefix : String) : Builder
+        # This works on any backend, but included here for completeness
+        escaped = prefix.gsub("%", "\\%").gsub("_", "\\_")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" LIKE ?", ["#{escaped}%"] of DBValue)])
+      end
+
+      # Ends with comparison
+      def where_ends_with(column : String, suffix : String) : Builder
+        escaped = suffix.gsub("%", "\\%").gsub("_", "\\_")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" LIKE ?", ["%#{escaped}"] of DBValue)])
+      end
+
+      # Case-insensitive LIKE (PostgreSQL ILIKE)
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_ilike("name", "%john%")
+      # # Matches "John", "JOHN DOE", "johnny", etc.
+      # ```
+      def where_ilike(column : String, pattern : String) : Builder
+        ensure_postgres!("ILIKE operator")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" ILIKE ?", [pattern] of DBValue)])
+      end
+
+      # Case-insensitive NOT LIKE
+      def where_not_ilike(column : String, pattern : String) : Builder
+        ensure_postgres!("NOT ILIKE operator")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" NOT ILIKE ?", [pattern] of DBValue)])
+      end
+
+      # ========================================
+      # PostgreSQL Array Functions (Enhanced)
+      # ========================================
+
+      # Check if array contains all specified elements
+      #
+      # ## Example
+      #
+      # ```
+      # query.where_array_contains_all("tags", ["crystal", "orm"])
+      # # SQL: WHERE "tags" @> ARRAY['crystal', 'orm']
+      # ```
+      def where_array_contains_all(column : String, values : Array(String)) : Builder
+        ensure_postgres!("Array containment operator (@>)")
+        return self if values.empty?
+        quoted = values.map { |v| "'#{v.gsub("'", "''")}'" }.join(", ")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" @> ARRAY[#{quoted}]", [] of DBValue)])
+      end
+
+      # Check if array is contained by another array
+      #
+      # All elements in the column must be present in the given values.
+      def where_array_is_contained_by(column : String, values : Array(String)) : Builder
+        ensure_postgres!("Array containment operator (<@)")
+        return self if values.empty?
+        quoted = values.map { |v| "'#{v.gsub("'", "''")}'" }.join(", ")
+        with_wheres(@wheres + [WhereClause.new("\"#{column}\" <@ ARRAY[#{quoted}]", [] of DBValue)])
+      end
+
+      # Array cardinality (length) using cardinality() function
+      #
+      # Works correctly with multi-dimensional arrays (returns total elements).
+      def where_cardinality(column : String, operator : String, value : Int32) : Builder
+        ensure_postgres!("cardinality() function")
+        with_wheres(@wheres + [WhereClause.new("cardinality(\"#{column}\") #{operator} #{value}", [] of DBValue)])
+      end
+
+      # Append element to array (for use in UPDATE)
+      #
+      # Returns an expression that can be used with raw SQL.
+      def select_array_append(column : String, value : String, as alias_name : String) : Builder
+        ensure_postgres!("array_append() function")
+        with_selects(@selects + ["array_append(\"#{column}\", '#{value.gsub("'", "''")}') AS \"#{alias_name}\""])
+      end
+
+      # Remove element from array (for use in UPDATE)
+      def select_array_remove(column : String, value : String, as alias_name : String) : Builder
+        ensure_postgres!("array_remove() function")
+        with_selects(@selects + ["array_remove(\"#{column}\", '#{value.gsub("'", "''")}') AS \"#{alias_name}\""])
+      end
+
+      # Get array element at index (1-based in PostgreSQL)
+      def select_array_element(column : String, index : Int32, as alias_name : String) : Builder
+        ensure_postgres!("Array subscript")
+        with_selects(@selects + ["\"#{column}\"[#{index}] AS \"#{alias_name}\""])
+      end
+
+      # Unnest array (expand to rows)
+      #
+      # ## Example
+      #
+      # ```
+      # # Expand tags array into individual rows
+      # query.select_unnest("tags", as: "tag")
+      # ```
+      def select_unnest(column : String, as alias_name : String) : Builder
+        ensure_postgres!("unnest() function")
+        with_selects(@selects + ["unnest(\"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # ========================================
+      # PostgreSQL Advanced Aggregations
+      # ========================================
+
+      # Aggregate values into an array
+      #
+      # ## Example
+      #
+      # ```
+      # query.group("user_id").select_array_agg("tag", as: "tags")
+      # # SQL: SELECT array_agg("tag") AS "tags" FROM ... GROUP BY user_id
+      # ```
+      def select_array_agg(column : String, distinct : Bool = false, order_by : String? = nil, as alias_name : String = "array_agg") : Builder
+        ensure_postgres!("array_agg() function")
+
+        distinct_sql = distinct ? "DISTINCT " : ""
+        order_sql = order_by ? " ORDER BY \"#{order_by}\"" : ""
+
+        with_selects(@selects + ["array_agg(#{distinct_sql}\"#{column}\"#{order_sql}) AS \"#{alias_name}\""])
+      end
+
+      # Aggregate strings with delimiter
+      #
+      # ## Example
+      #
+      # ```
+      # query.group("category_id").select_string_agg("name", ", ", order_by: "name", as: "names")
+      # # SQL: SELECT string_agg("name", ', ' ORDER BY "name") AS "names"
+      # ```
+      def select_string_agg(column : String, delimiter : String, distinct : Bool = false, order_by : String? = nil, as alias_name : String = "string_agg") : Builder
+        ensure_postgres!("string_agg() function")
+
+        distinct_sql = distinct ? "DISTINCT " : ""
+        order_sql = order_by ? " ORDER BY \"#{order_by}\"" : ""
+
+        with_selects(@selects + ["string_agg(#{distinct_sql}\"#{column}\", '#{delimiter}'#{order_sql}) AS \"#{alias_name}\""])
+      end
+
+      # Calculate mode (most common value)
+      #
+      # ## Example
+      #
+      # ```
+      # query.select_mode("rating", as: "most_common_rating")
+      # # SQL: SELECT mode() WITHIN GROUP (ORDER BY "rating") AS "most_common_rating"
+      # ```
+      def select_mode(column : String, as alias_name : String = "mode") : Builder
+        ensure_postgres!("mode() function")
+        with_selects(@selects + ["mode() WITHIN GROUP (ORDER BY \"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Calculate percentile (continuous)
+      #
+      # ## Example
+      #
+      # ```
+      # query.select_percentile("response_time", 0.95, as: "p95")
+      # # SQL: SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY "response_time") AS "p95"
+      # ```
+      def select_percentile(column : String, percentile : Float64, as alias_name : String = "percentile") : Builder
+        ensure_postgres!("percentile_cont() function")
+        with_selects(@selects + ["percentile_cont(#{percentile}) WITHIN GROUP (ORDER BY \"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Calculate median (50th percentile)
+      def select_median(column : String, as alias_name : String = "median") : Builder
+        select_percentile(column, 0.5, as: alias_name)
+      end
+
+      # Calculate percentile (discrete - returns actual value from dataset)
+      def select_percentile_disc(column : String, percentile : Float64, as alias_name : String = "percentile") : Builder
+        ensure_postgres!("percentile_disc() function")
+        with_selects(@selects + ["percentile_disc(#{percentile}) WITHIN GROUP (ORDER BY \"#{column}\") AS \"#{alias_name}\""])
+      end
+
+      # Aggregate into JSON array
+      #
+      # ## Example
+      #
+      # ```
+      # query.group("user_id").select_json_agg("order_id", as: "order_ids")
+      # # SQL: SELECT json_agg("order_id") AS "order_ids"
+      # ```
+      def select_json_agg(column : String, order_by : String? = nil, as alias_name : String = "json_agg") : Builder
+        ensure_postgres!("json_agg() function")
+        order_sql = order_by ? " ORDER BY \"#{order_by}\"" : ""
+        with_selects(@selects + ["json_agg(\"#{column}\"#{order_sql}) AS \"#{alias_name}\""])
+      end
+
+      # Aggregate into JSONB array
+      def select_jsonb_agg(column : String, order_by : String? = nil, as alias_name : String = "jsonb_agg") : Builder
+        ensure_postgres!("jsonb_agg() function")
+        order_sql = order_by ? " ORDER BY \"#{order_by}\"" : ""
+        with_selects(@selects + ["jsonb_agg(\"#{column}\"#{order_sql}) AS \"#{alias_name}\""])
+      end
+
+      # Build JSON object from key-value pairs
+      #
+      # ## Example
+      #
+      # ```
+      # query.select_json_build_object({"name" => "name", "email" => "email"}, as: "user_info")
+      # # SQL: SELECT json_build_object('name', "name", 'email', "email") AS "user_info"
+      # ```
+      def select_json_build_object(pairs : Hash(String, String), as alias_name : String = "json_object") : Builder
+        ensure_postgres!("json_build_object() function")
+        parts = pairs.flat_map { |k, v| ["'#{k}'", "\"#{v}\""] }
+        with_selects(@selects + ["json_build_object(#{parts.join(", ")}) AS \"#{alias_name}\""])
+      end
+
+      # ========================================
+      # PostgreSQL Backend Helper
+      # ========================================
+
+      # Check if current backend is PostgreSQL
+      private def is_postgres? : Bool
+        Ralph.settings.database.try(&.dialect) == :postgres
+      end
+
+      # Ensure PostgreSQL backend or raise error
+      private def ensure_postgres!(feature : String) : Nil
+        unless is_postgres?
+          raise Ralph::BackendError.new("#{feature} is only available on PostgreSQL backend")
+        end
+      end
+
+      # ========================================
       # Window Functions Support
       # ========================================
 

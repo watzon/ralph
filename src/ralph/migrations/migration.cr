@@ -324,6 +324,163 @@ module Ralph
         change_column(table, column, default: new_default)
       end
 
+      # ========================================
+      # PostgreSQL-Specific Index Methods
+      # ========================================
+
+      # Add a GIN index (PostgreSQL only)
+      #
+      # GIN (Generalized Inverted Index) is optimized for:
+      # - JSONB containment queries (@>, ?, ?|, ?&)
+      # - Array overlap/containment (&&, @>, <@)
+      # - Full-text search (@@)
+      #
+      # ## Options
+      #
+      # - **name**: Custom index name (auto-generated if not provided)
+      # - **fastupdate**: Use fast update optimization (default: true)
+      #
+      # ## Usage
+      #
+      # ```
+      # add_gin_index("posts", "metadata")
+      # add_gin_index("posts", "tags", name: "idx_posts_tags", fastupdate: false)
+      # ```
+      def add_gin_index(table : String, column : String, name : String? = nil, fastupdate : Bool = true)
+        index = Schema::GinIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_gin", fastupdate)
+        @database.execute(index.to_sql)
+      end
+
+      # Remove a GIN index
+      def remove_gin_index(table : String, column : String? = nil, name : String? = nil)
+        index_name = name || "index_#{table}_on_#{column}_gin"
+        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
+      end
+
+      # Add a GiST index (PostgreSQL only)
+      #
+      # GiST (Generalized Search Tree) is optimized for:
+      # - Geometric data types (point, circle, polygon)
+      # - Range types
+      # - Nearest-neighbor searches
+      #
+      # ## Usage
+      #
+      # ```
+      # add_gist_index("locations", "coordinates")
+      # add_gist_index("ranges", "date_range", name: "idx_date_range_gist")
+      # ```
+      def add_gist_index(table : String, column : String, name : String? = nil)
+        index = Schema::GistIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_gist")
+        @database.execute(index.to_sql)
+      end
+
+      # Add a GiST index on multiple columns
+      def add_gist_index(table : String, columns : Array(String), name : String? = nil)
+        index = Schema::GistIndexDefinition.new(table, columns, name || "index_#{table}_on_#{columns.join("_")}_gist")
+        @database.execute(index.to_sql)
+      end
+
+      # Remove a GiST index
+      def remove_gist_index(table : String, column : String? = nil, name : String? = nil)
+        index_name = name || "index_#{table}_on_#{column}_gist"
+        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
+      end
+
+      # Add a full-text search index (PostgreSQL only)
+      #
+      # Creates a GIN index on a tsvector expression for efficient full-text search.
+      #
+      # ## Options
+      #
+      # - **config**: Text search configuration (default: "english")
+      # - **name**: Custom index name
+      # - **fastupdate**: Use fast update optimization (default: true)
+      #
+      # ## Usage
+      #
+      # ```
+      # add_full_text_index("articles", "title")
+      # add_full_text_index("articles", ["title", "content"], config: "english")
+      # ```
+      def add_full_text_index(table : String, column : String, config : String = "english", name : String? = nil, fastupdate : Bool = true)
+        index = Schema::FullTextIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_fts", config, fastupdate)
+        @database.execute(index.to_sql)
+      end
+
+      # Add a full-text search index on multiple columns
+      def add_full_text_index(table : String, columns : Array(String), config : String = "english", name : String? = nil, fastupdate : Bool = true)
+        index = Schema::FullTextIndexDefinition.new(table, columns, name || "index_#{table}_on_#{columns.join("_")}_fts", config, fastupdate)
+        @database.execute(index.to_sql)
+      end
+
+      # Remove a full-text search index
+      def remove_full_text_index(table : String, column : String? = nil, name : String? = nil)
+        index_name = name || "index_#{table}_on_#{column}_fts"
+        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
+      end
+
+      # Add a partial index (PostgreSQL only)
+      #
+      # Partial indexes only index rows matching the WHERE condition.
+      # Smaller and faster for specific queries.
+      #
+      # ## Options
+      #
+      # - **condition**: SQL WHERE clause (required)
+      # - **name**: Custom index name
+      # - **unique**: Create unique index (default: false)
+      #
+      # ## Usage
+      #
+      # ```
+      # # Only index active users
+      # add_partial_index("users", "email", condition: "active = true")
+      #
+      # # Unique constraint only on published posts
+      # add_partial_index("posts", "slug", condition: "status = 'published'", unique: true)
+      # ```
+      def add_partial_index(table : String, column : String, condition : String, name : String? = nil, unique : Bool = false)
+        index = Schema::PartialIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_partial", condition, unique)
+        @database.execute(index.to_sql)
+      end
+
+      # Remove a partial index
+      def remove_partial_index(table : String, column : String? = nil, name : String? = nil)
+        index_name = name || "index_#{table}_on_#{column}_partial"
+        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
+      end
+
+      # Add an expression index (PostgreSQL only)
+      #
+      # Expression indexes index the result of an expression rather than a column.
+      # Useful for case-insensitive searches, computed values, etc.
+      #
+      # ## Options
+      #
+      # - **name**: Index name (required)
+      # - **unique**: Create unique index (default: false)
+      # - **using**: Index method (e.g., "btree", "hash", "gin", "gist")
+      #
+      # ## Usage
+      #
+      # ```
+      # # Case-insensitive email lookup
+      # add_expression_index("users", "lower(email)", name: "idx_users_email_lower", unique: true)
+      #
+      # # Index on year extracted from timestamp
+      # add_expression_index("orders", "extract(year from created_at)", name: "idx_orders_year")
+      # ```
+      def add_expression_index(table : String, expression : String, name : String, unique : Bool = false, using : String? = nil)
+        index = Schema::ExpressionIndexDefinition.new(table, expression, name, unique, using)
+        @database.execute(index.to_sql)
+      end
+
+      # Remove an expression index
+      def remove_expression_index(name : String)
+        @database.execute("DROP INDEX IF EXISTS \"#{name}\"")
+      end
+
       # Execute raw SQL
       def execute(sql : String)
         @database.execute(sql)

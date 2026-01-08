@@ -135,6 +135,186 @@ module Ralph
         :postgres
       end
 
+      # ========================================
+      # PostgreSQL-Specific Methods
+      # ========================================
+
+      # Get all available text search configurations
+      #
+      # Returns a list of available text search configuration names that can be
+      # used with full-text search functions like to_tsvector() and to_tsquery().
+      #
+      # ## Example
+      #
+      # ```
+      # backend = Ralph::Database::PostgresBackend.new(url)
+      # configs = backend.available_text_search_configs
+      # # => ["arabic", "danish", "dutch", "english", "finnish", "french", "german", ...]
+      # ```
+      #
+      # ## Common Configurations
+      #
+      # - **simple**: No stemming, just lowercasing and removing stop words
+      # - **english**: English language with stemming and stop words
+      # - **french**: French language configuration
+      # - **german**: German language configuration
+      # - **spanish**: Spanish language configuration
+      # - **russian**: Russian language configuration
+      # - And many more...
+      def available_text_search_configs : Array(String)
+        result = @db.query("SELECT cfgname FROM pg_ts_config ORDER BY cfgname")
+        configs = [] of String
+        result.each do
+          configs << result.read(String)
+        end
+        configs
+      ensure
+        result.try(&.close)
+      end
+
+      # Get text search configuration details
+      #
+      # Returns information about a specific text search configuration.
+      #
+      # ## Example
+      #
+      # ```
+      # backend.text_search_config_info("english")
+      # # => {name: "english", parser: "default", dictionaries: [...]}
+      # ```
+      def text_search_config_info(config_name : String) : Hash(String, String)
+        result = @db.query_one(<<-SQL, args: [config_name] of DB::Any)
+          SELECT c.cfgname, p.prsname as parser_name, c.cfgnamespace::regnamespace::text as schema
+          FROM pg_ts_config c
+          JOIN pg_ts_parser p ON c.cfgparser = p.oid
+          WHERE c.cfgname = $1
+        SQL
+
+        info = Hash(String, String).new
+        if result
+          info["name"] = result.read(String)
+          info["parser"] = result.read(String)
+          info["schema"] = result.read(String)
+        end
+        info
+      ensure
+        result.try(&.close) if result.is_a?(DB::ResultSet)
+      end
+
+      # Check if a text search configuration exists
+      def text_search_config_exists?(config_name : String) : Bool
+        result = @db.scalar("SELECT COUNT(*) FROM pg_ts_config WHERE cfgname = $1", args: [config_name] of DB::Any)
+        case result
+        when Int64
+          result > 0
+        else
+          false
+        end
+      end
+
+      # Create a custom text search configuration
+      #
+      # Creates a new text search configuration by copying from an existing one.
+      #
+      # ## Example
+      #
+      # ```
+      # # Create a custom config based on English
+      # backend.create_text_search_config("my_english", copy_from: "english")
+      # ```
+      def create_text_search_config(name : String, copy_from : String = "english")
+        @db.exec("CREATE TEXT SEARCH CONFIGURATION \"#{name}\" (COPY = \"#{copy_from}\")")
+      end
+
+      # Drop a custom text search configuration
+      #
+      # ## Example
+      #
+      # ```
+      # backend.drop_text_search_config("my_english")
+      # ```
+      def drop_text_search_config(name : String, if_exists : Bool = true)
+        if_exists_sql = if_exists ? "IF EXISTS " : ""
+        @db.exec("DROP TEXT SEARCH CONFIGURATION #{if_exists_sql}\"#{name}\"")
+      end
+
+      # Get PostgreSQL version
+      #
+      # Returns the PostgreSQL server version as a string.
+      #
+      # ## Example
+      #
+      # ```
+      # backend.postgres_version
+      # # => "15.4"
+      # ```
+      def postgres_version : String
+        result = @db.scalar("SELECT version()")
+        case result
+        when String
+          # Extract version number from "PostgreSQL 15.4 on ..."
+          if match = result.match(/PostgreSQL (\d+\.\d+)/)
+            match[1]
+          else
+            result
+          end
+        else
+          "unknown"
+        end
+      end
+
+      # Check if a PostgreSQL extension is available
+      #
+      # ## Example
+      #
+      # ```
+      # backend.extension_available?("pg_trgm") # => true
+      # backend.extension_available?("postgis") # => false (if not installed)
+      # ```
+      def extension_available?(name : String) : Bool
+        result = @db.scalar(<<-SQL, args: [name] of DB::Any)
+          SELECT COUNT(*) FROM pg_available_extensions WHERE name = $1
+        SQL
+        case result
+        when Int64
+          result > 0
+        else
+          false
+        end
+      end
+
+      # Check if a PostgreSQL extension is installed
+      def extension_installed?(name : String) : Bool
+        result = @db.scalar(<<-SQL, args: [name] of DB::Any)
+          SELECT COUNT(*) FROM pg_extension WHERE extname = $1
+        SQL
+        case result
+        when Int64
+          result > 0
+        else
+          false
+        end
+      end
+
+      # Install a PostgreSQL extension
+      #
+      # ## Example
+      #
+      # ```
+      # backend.create_extension("pg_trgm")
+      # ```
+      def create_extension(name : String, if_not_exists : Bool = true)
+        if_not_exists_sql = if_not_exists ? "IF NOT EXISTS " : ""
+        @db.exec("CREATE EXTENSION #{if_not_exists_sql}\"#{name}\"")
+      end
+
+      # Uninstall a PostgreSQL extension
+      def drop_extension(name : String, if_exists : Bool = true, cascade : Bool = false)
+        if_exists_sql = if_exists ? "IF EXISTS " : ""
+        cascade_sql = cascade ? " CASCADE" : ""
+        @db.exec("DROP EXTENSION #{if_exists_sql}\"#{name}\"#{cascade_sql}")
+      end
+
       private def convert_placeholders(query : String) : String
         return query unless query.includes?('?')
 
