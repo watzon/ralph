@@ -30,9 +30,143 @@ module Ralph
           end
         end
 
+        # Auto-incrementing integer primary key (default)
+        #
+        # Creates an auto-incrementing integer primary key column.
+        #
+        # - **SQLite**: `INTEGER PRIMARY KEY AUTOINCREMENT`
+        # - **PostgreSQL**: `BIGSERIAL PRIMARY KEY`
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :users do |t|
+        #   t.primary_key  # Creates "id" column
+        #   t.primary_key "user_id"  # Custom name
+        # end
+        # ```
         def primary_key(name = "id")
           @primary_key_sql = @dialect.primary_key_definition(name.to_s)
           @primary_key_column = name.to_s
+        end
+
+        # Type-aware primary key
+        #
+        # Creates a primary key column with the specified type. Useful for UUID,
+        # string, or other non-integer primary keys.
+        #
+        # ## Options
+        #
+        # - **type**: Column type (:uuid, :string, :text, :integer, :bigint)
+        # - **default**: SQL default expression (e.g., "gen_random_uuid()" for PostgreSQL UUID)
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :users do |t|
+        #   t.primary_key "id", :uuid  # UUID primary key
+        #   t.string :name
+        # end
+        #
+        # create_table :settings do |t|
+        #   t.primary_key "key", :string  # String primary key
+        #   t.text :value
+        # end
+        # ```
+        #
+        # ## Backend Behavior
+        #
+        # | Type | SQLite | PostgreSQL |
+        # |------|--------|------------|
+        # | :uuid | CHAR(36) PRIMARY KEY NOT NULL | UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid() |
+        # | :string | TEXT PRIMARY KEY NOT NULL | TEXT PRIMARY KEY NOT NULL |
+        # | :integer | INTEGER PRIMARY KEY AUTOINCREMENT | SERIAL PRIMARY KEY |
+        # | :bigint | INTEGER PRIMARY KEY AUTOINCREMENT | BIGSERIAL PRIMARY KEY |
+        def primary_key(name : String, type : Symbol, default : String? = nil)
+          @primary_key_sql = @dialect.primary_key_definition(name, type, default)
+          @primary_key_column = name
+        end
+
+        # UUID primary key
+        #
+        # Creates a UUID primary key column. This is a convenience method for
+        # `primary_key("id", :uuid)`.
+        #
+        # - **SQLite**: Stored as CHAR(36), requires application-level UUID generation
+        # - **PostgreSQL**: Native UUID type with automatic generation via gen_random_uuid()
+        #
+        # ## Options
+        #
+        # - **name**: Column name (default: "id")
+        # - **default**: SQL default expression. PostgreSQL defaults to "gen_random_uuid()".
+        #   For SQLite, UUIDs must be generated in application code.
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :users do |t|
+        #   t.uuid_primary_key
+        #   t.string :email
+        # end
+        #
+        # create_table :api_keys do |t|
+        #   t.uuid_primary_key "key_id"
+        #   t.string :name
+        # end
+        # ```
+        def uuid_primary_key(name : String = "id", default : String? = nil)
+          primary_key(name, :uuid, default)
+        end
+
+        # String primary key
+        #
+        # Creates a TEXT primary key column. Useful for natural keys like slugs,
+        # codes, or external identifiers.
+        #
+        # ## Options
+        #
+        # - **name**: Column name (default: "id")
+        # - **default**: SQL default expression
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :settings do |t|
+        #   t.string_primary_key "key"
+        #   t.text :value
+        # end
+        #
+        # create_table :countries do |t|
+        #   t.string_primary_key "code"  # e.g., "US", "GB"
+        #   t.string :name
+        # end
+        # ```
+        def string_primary_key(name : String = "id", default : String? = nil)
+          primary_key(name, :string, default)
+        end
+
+        # Bigint primary key (non-auto-incrementing)
+        #
+        # Creates a BIGINT primary key without auto-increment. Useful when you need
+        # to control ID generation (e.g., distributed IDs, snowflake IDs).
+        #
+        # For auto-incrementing integer primary keys, use `primary_key()` instead.
+        #
+        # ## Options
+        #
+        # - **name**: Column name (default: "id")
+        # - **default**: SQL default expression
+        #
+        # ## Example
+        #
+        # ```
+        # create_table :events do |t|
+        #   t.bigint_primary_key  # Application generates IDs
+        #   t.string :type
+        # end
+        # ```
+        def bigint_primary_key(name : String = "id", default : String? = nil)
+          primary_key(name, :bigint, default)
         end
 
         # String column

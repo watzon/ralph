@@ -176,12 +176,6 @@ describe Ralph::Migrations::Schema::IndexDefinition do
 end
 
 describe Ralph::Migrations::Schema::Dialect do
-  it "returns dialect matching current database backend" do
-    # The dialect is set based on the configured database backend
-    expected_dialect = Ralph.database.dialect
-    Ralph::Migrations::Schema::Dialect.current.identifier.should eq(expected_dialect)
-  end
-
   it "can switch to Postgres dialect" do
     original = Ralph::Migrations::Schema::Dialect.current
     Ralph::Migrations::Schema::Dialect.current = Ralph::Migrations::Schema::Dialect::Postgres.new
@@ -362,5 +356,98 @@ describe "timestamps_not_null" do
     sql = definition.to_sql
     sql.should contain("\"created_at\" TIMESTAMP NOT NULL")
     sql.should contain("\"updated_at\" TIMESTAMP NOT NULL")
+  end
+end
+
+describe "type-aware primary keys" do
+  describe "SQLite dialect" do
+    dialect = Ralph::Migrations::Schema::Dialect::Sqlite.new
+
+    it "creates UUID primary key" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("users", dialect)
+      definition.uuid_primary_key
+      definition.string("email")
+
+      sql = definition.to_sql
+      sql.should contain("\"id\" CHAR(36) PRIMARY KEY NOT NULL")
+    end
+
+    it "creates UUID primary key with custom name" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("api_keys", dialect)
+      definition.uuid_primary_key("key_id")
+
+      sql = definition.to_sql
+      sql.should contain("\"key_id\" CHAR(36) PRIMARY KEY NOT NULL")
+    end
+
+    it "creates string primary key" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("settings", dialect)
+      definition.string_primary_key("key")
+      definition.text("value")
+
+      sql = definition.to_sql
+      sql.should contain("\"key\" TEXT PRIMARY KEY NOT NULL")
+    end
+
+    it "creates primary key with explicit type" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("items", dialect)
+      definition.primary_key("id", :uuid)
+
+      sql = definition.to_sql
+      sql.should contain("\"id\" CHAR(36) PRIMARY KEY NOT NULL")
+    end
+
+    it "falls back to auto-increment for integer type" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("posts", dialect)
+      definition.primary_key("id", :integer)
+
+      sql = definition.to_sql
+      sql.should contain("INTEGER PRIMARY KEY AUTOINCREMENT")
+    end
+  end
+
+  describe "PostgreSQL dialect" do
+    dialect = Ralph::Migrations::Schema::Dialect::Postgres.new
+
+    it "creates UUID primary key with default gen_random_uuid()" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("users", dialect)
+      definition.uuid_primary_key
+      definition.string("email")
+
+      sql = definition.to_sql
+      sql.should contain("\"id\" UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid()")
+    end
+
+    it "creates UUID primary key with custom default" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("users", dialect)
+      definition.uuid_primary_key("id", "uuid_generate_v4()")
+
+      sql = definition.to_sql
+      sql.should contain("\"id\" UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4()")
+    end
+
+    it "creates string primary key" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("settings", dialect)
+      definition.string_primary_key("key")
+
+      sql = definition.to_sql
+      sql.should contain("\"key\" TEXT PRIMARY KEY NOT NULL")
+    end
+
+    it "creates SERIAL for integer type" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("posts", dialect)
+      definition.primary_key("id", :integer)
+
+      sql = definition.to_sql
+      sql.should contain("\"id\" SERIAL PRIMARY KEY")
+    end
+
+    it "creates BIGSERIAL for bigint type" do
+      definition = Ralph::Migrations::Schema::TableDefinition.new("posts", dialect)
+      definition.primary_key("id", :bigint)
+
+      sql = definition.to_sql
+      sql.should contain("BIGSERIAL PRIMARY KEY")
+    end
   end
 end

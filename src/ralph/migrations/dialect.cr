@@ -5,6 +5,7 @@ module Ralph
         abstract class Base
           abstract def column_type(type : Symbol, options : Hash(Symbol, String | Int32 | Int64 | Float64 | Bool | Symbol | Nil)) : String
           abstract def primary_key_definition(name : String) : String
+          abstract def primary_key_definition(name : String, type : Symbol, default : String? = nil) : String
           abstract def auto_increment_clause : String
           abstract def identifier : Symbol
 
@@ -52,6 +53,35 @@ module Ralph
 
           def primary_key_definition(name : String) : String
             "\"#{name}\" INTEGER PRIMARY KEY AUTOINCREMENT"
+          end
+
+          # Type-aware primary key definition
+          #
+          # Generates primary key SQL for non-integer types like UUID or String.
+          #
+          # ## Example
+          #
+          # ```
+          # dialect.primary_key_definition("id", :uuid)
+          # # => "\"id\" CHAR(36) PRIMARY KEY NOT NULL"
+          # ```
+          def primary_key_definition(name : String, type : Symbol, default : String? = nil) : String
+            sql_type = case type
+                       when :integer
+                         return primary_key_definition(name) # Use auto-increment version
+                       when :bigint
+                         return primary_key_definition(name) # SQLite uses INTEGER for all int PKs
+                       when :uuid
+                         "CHAR(36)"
+                       when :string, :text
+                         "TEXT"
+                       else
+                         column_type(type, {} of Symbol => String | Int32 | Int64 | Float64 | Bool | Symbol | Nil)
+                       end
+
+            sql = "\"#{name}\" #{sql_type} PRIMARY KEY NOT NULL"
+            sql += " DEFAULT #{default}" if default
+            sql
           end
 
           def auto_increment_clause : String
@@ -113,6 +143,40 @@ module Ralph
 
           def primary_key_definition(name : String) : String
             "\"#{name}\" BIGSERIAL PRIMARY KEY"
+          end
+
+          # Type-aware primary key definition
+          #
+          # Generates primary key SQL for non-integer types like UUID or String.
+          #
+          # ## Example
+          #
+          # ```
+          # dialect.primary_key_definition("id", :uuid, "gen_random_uuid()")
+          # # => "\"id\" UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid()"
+          # ```
+          def primary_key_definition(name : String, type : Symbol, default : String? = nil) : String
+            case type
+            when :integer
+              "\"#{name}\" SERIAL PRIMARY KEY"
+            when :bigint
+              return primary_key_definition(name) # Use BIGSERIAL version
+            when :uuid
+              sql = "\"#{name}\" UUID PRIMARY KEY NOT NULL"
+              # Default to gen_random_uuid() for UUID if no default specified
+              actual_default = default || "gen_random_uuid()"
+              sql += " DEFAULT #{actual_default}"
+              sql
+            when :string, :text
+              sql = "\"#{name}\" TEXT PRIMARY KEY NOT NULL"
+              sql += " DEFAULT #{default}" if default
+              sql
+            else
+              sql_type = column_type(type, {} of Symbol => String | Int32 | Int64 | Float64 | Bool | Symbol | Nil)
+              sql = "\"#{name}\" #{sql_type} PRIMARY KEY NOT NULL"
+              sql += " DEFAULT #{default}" if default
+              sql
+            end
           end
 
           def auto_increment_clause : String
