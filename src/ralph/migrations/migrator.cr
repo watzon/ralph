@@ -75,13 +75,13 @@ module Ralph
         result = @database.query_one("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")
         return nil unless result
 
-        # Read the version from the result
-        result.each do
-          return result.read(String)
-        end
-        nil
-      ensure
+        # query_one already called move_next, so we can read directly
+        version = result.read(String)
+        result.close
+        version
+      rescue
         result.close if result
+        nil
       end
 
       # Get all applied migration versions

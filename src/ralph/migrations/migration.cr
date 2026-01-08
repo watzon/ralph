@@ -45,7 +45,7 @@ module Ralph
       # Macro to set the migration version
       macro migration_version(num)
         def self.version : String
-          {{num.stringify}}
+          "#{{{num}}}"
         end
       end
 
