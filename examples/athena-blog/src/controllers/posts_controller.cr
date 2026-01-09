@@ -4,6 +4,7 @@ module Blog::Controllers
     include Blog::ViewHelpers
 
     @session_service : Blog::SessionService
+    @ralph : Ralph::Athena::Service
     @flash_success : String?
     @flash_error : String?
     @flash_info : String?
@@ -15,7 +16,10 @@ module Blog::Controllers
     @comments : Array(Blog::Comment)
     @errors : Array(String)
 
-    def initialize(@session_service : Blog::SessionService)
+    def initialize(
+      @session_service : Blog::SessionService,
+      @ralph : Ralph::Athena::Service,
+    )
       @flash_success = nil
       @flash_error = nil
       @flash_info = nil
@@ -98,6 +102,9 @@ module Blog::Controllers
       @post.user_id = current_user_id
 
       if @post.save
+        # Invalidate posts cache after creating a new post
+        @ralph.invalidate_cache("posts")
+
         new_session = Blog::SessionService::SessionData.new(
           user_id: session.user_id,
           flash_success: "Post created successfully!"
@@ -176,6 +183,7 @@ module Blog::Controllers
         return response
       end
 
+      @post = post
       @flash_success = session.flash_success
       @flash_error = session.flash_error
       @flash_info = session.flash_info
@@ -218,6 +226,9 @@ module Blog::Controllers
       @post.published = data["published"]? == "true"
 
       if @post.save
+        # Invalidate posts cache after updating
+        @ralph.invalidate_cache("posts")
+
         new_session = Blog::SessionService::SessionData.new(
           user_id: session.user_id,
           flash_success: "Post updated successfully!"
@@ -259,7 +270,17 @@ module Blog::Controllers
         return response
       end
 
-      post.destroy
+      # Use transaction for deleting post and its comments
+      @ralph.transaction do
+        # Delete all comments first, then the post
+        post.comments.each(&.destroy)
+        post.destroy
+      end
+
+      # Invalidate caches after deletion
+      @ralph.invalidate_cache("posts")
+      @ralph.invalidate_cache("comments")
+
       new_session = Blog::SessionService::SessionData.new(
         user_id: session.user_id,
         flash_success: "Post deleted successfully."

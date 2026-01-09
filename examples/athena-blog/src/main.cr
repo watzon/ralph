@@ -1,6 +1,10 @@
 require "athena"
 require "ralph"
 require "ralph/backends/sqlite"
+require "ralph/plugins/athena"
+
+# Load migrations BEFORE configure so auto_migrate can find them
+require "../db/migrations/*"
 
 require "./models/*"
 require "./services/*"
@@ -19,23 +23,10 @@ module Blog
   module Listeners; end
 end
 
-# Configure Ralph
-Ralph.configure do |config|
-  config.database = Ralph::Database::SqliteBackend.new("sqlite3://./blog.sqlite3")
-end
-
-# Load and run migrations
-require "../db/migrations/*"
-
-def run_pending_migrations
-  migrator = Ralph::Migrations::Migrator.new(Ralph.database)
-  pending = migrator.status.select { |_, applied| !applied }
-
-  if pending.any?
-    puts "Running #{pending.size} pending migration(s)..."
-    migrator.migrate(:up)
-    puts "Migrations complete!"
-  end
-end
-
-run_pending_migrations
+# Configure Ralph using the Athena plugin
+# This reads DATABASE_URL from environment, or uses the provided URL
+Ralph::Athena.configure(
+  database_url: "sqlite3://./blog.sqlite3",
+  auto_migrate: true,
+  log_migrations: true
+)

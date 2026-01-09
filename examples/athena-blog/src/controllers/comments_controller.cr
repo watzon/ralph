@@ -1,7 +1,10 @@
 module Blog::Controllers
   @[ADI::Register]
   class CommentsController < ATH::Controller
-    def initialize(@session_service : Blog::SessionService)
+    def initialize(
+      @session_service : Blog::SessionService,
+      @ralph : Ralph::Athena::Service,
+    )
     end
 
     # POST /posts/:id/comments - Create comment
@@ -34,6 +37,9 @@ module Blog::Controllers
       comment.post_id = post_id
 
       if comment.save
+        # Invalidate comments cache after creating
+        @ralph.invalidate_cache("comments")
+
         new_session = Blog::SessionService::SessionData.new(
           user_id: session.user_id,
           flash_success: "Comment added!"
@@ -74,6 +80,9 @@ module Blog::Controllers
 
       post_id = comment.post_id
       comment.destroy
+
+      # Invalidate comments cache after deleting
+      @ralph.invalidate_cache("comments")
 
       new_session = Blog::SessionService::SessionData.new(
         user_id: session.user_id,

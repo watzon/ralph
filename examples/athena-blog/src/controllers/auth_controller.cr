@@ -4,6 +4,7 @@ module Blog::Controllers
     include Blog::ViewHelpers
 
     @session_service : Blog::SessionService
+    @ralph : Ralph::Athena::Service
     @flash_success : String?
     @flash_error : String?
     @flash_info : String?
@@ -14,7 +15,10 @@ module Blog::Controllers
     @username : String
     @errors : Array(String)
 
-    def initialize(@session_service : Blog::SessionService)
+    def initialize(
+      @session_service : Blog::SessionService,
+      @ralph : Ralph::Athena::Service,
+    )
       @flash_success = nil
       @flash_error = nil
       @flash_info = nil
@@ -140,17 +144,23 @@ module Blog::Controllers
         user = Blog::User.new(username: username, email: email)
         user.password = password
 
-        if user.save
-          new_session = Blog::SessionService::SessionData.new(
-            user_id: user.id,
-            flash_success: "Welcome to Ralph Blog, #{user.username}!"
-          )
+        # Use transaction for user creation (good practice for multi-step operations)
+        @ralph.transaction do
+          if user.save
+            # Invalidate users cache after registration
+            @ralph.invalidate_cache("users")
 
-          response = redirect("/")
-          @session_service.set_session(response, new_session)
-          return response
-        else
-          errors = user.errors.full_messages
+            new_session = Blog::SessionService::SessionData.new(
+              user_id: user.id,
+              flash_success: "Welcome to Ralph Blog, #{user.username}!"
+            )
+
+            response = redirect("/")
+            @session_service.set_session(response, new_session)
+            return response
+          else
+            errors = user.errors.full_messages
+          end
         end
       end
 
