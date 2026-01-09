@@ -96,6 +96,97 @@ module Ralph
       # Used by migrations and schema generation
       abstract def dialect : Symbol
 
+      # Schema Introspection Methods
+      # ============================
+      #
+      # These methods allow introspecting the actual database schema.
+      # Used by `db:pull` (generate models from schema) and `db:generate`
+      # (compare models against schema for diff-based migrations).
+      #
+      # Introspection is implemented at the backend level so that:
+      # - Each backend uses its native introspection mechanisms
+      # - Third-party backends can provide introspection out of the box
+      # - CLI commands work uniformly across all backends
+
+      # Get list of all user tables (excluding system tables)
+      #
+      # Should exclude:
+      # - SQLite: sqlite_* tables, schema_migrations
+      # - PostgreSQL: pg_* tables, information_schema tables, schema_migrations
+      #
+      # Returns table names in alphabetical order.
+      abstract def table_names : Array(String)
+
+      # Get column information for a specific table
+      #
+      # Returns all columns with their types, nullability, defaults, etc.
+      abstract def introspect_columns(table : String) : Array(Schema::DatabaseColumn)
+
+      # Get index information for a specific table
+      #
+      # Returns all indexes including primary key index.
+      abstract def introspect_indexes(table : String) : Array(Schema::DatabaseIndex)
+
+      # Get foreign key constraints FROM a table (outgoing FKs)
+      #
+      # These are FKs defined on this table that reference other tables.
+      # Used for inferring `belongs_to` associations.
+      abstract def introspect_foreign_keys(table : String) : Array(Schema::DatabaseForeignKey)
+
+      # Get foreign key constraints TO a table (incoming FKs)
+      #
+      # These are FKs from OTHER tables that reference this table.
+      # Used for inferring `has_many` and `has_one` associations.
+      abstract def introspect_foreign_keys_referencing(table : String) : Array(Schema::DatabaseForeignKey)
+
+      # Introspect a single table completely
+      #
+      # Returns a DatabaseTable with all columns, indexes, and foreign keys.
+      def introspect_table(name : String) : Schema::DatabaseTable
+        columns = introspect_columns(name)
+        indexes = introspect_indexes(name)
+        foreign_keys = introspect_foreign_keys(name)
+        primary_key_columns = columns.select(&.primary_key).map(&.name)
+
+        Schema::DatabaseTable.new(
+          name: name,
+          columns: columns,
+          indexes: indexes,
+          foreign_keys: foreign_keys,
+          primary_key_columns: primary_key_columns
+        )
+      end
+
+      # Introspect the entire database schema
+      #
+      # Returns a DatabaseSchema containing all tables with their
+      # columns, indexes, and foreign keys.
+      def introspect_schema : Schema::DatabaseSchema
+        tables = {} of String => Schema::DatabaseTable
+
+        table_names.each do |name|
+          tables[name] = introspect_table(name)
+        end
+
+        Schema::DatabaseSchema.new(tables)
+      end
+
+      # Introspect specific tables only
+      #
+      # More efficient than full schema introspection when you only
+      # need a subset of tables.
+      def introspect_tables(names : Array(String)) : Schema::DatabaseSchema
+        tables = {} of String => Schema::DatabaseTable
+
+        names.each do |name|
+          if table_names.includes?(name)
+            tables[name] = introspect_table(name)
+          end
+        end
+
+        Schema::DatabaseSchema.new(tables)
+      end
+
       # Connection Pool Methods
       # =======================
 

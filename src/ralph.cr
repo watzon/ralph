@@ -246,9 +246,13 @@ module Ralph
   end
 end
 
+# External dependencies
+require "cadmium_inflector"
+
 # Core library requires
 require "./ralph/errors"
 require "./ralph/settings"
+require "./ralph/schema/*"
 require "./ralph/database"
 require "./ralph/types/types"
 require "./ralph/validations"

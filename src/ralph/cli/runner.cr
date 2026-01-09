@@ -102,6 +102,8 @@ module Ralph
           db:reset                     Drop, create, migrate, and seed
           db:setup                     Create database and run migrations
           db:pool                      Show connection pool status
+          db:pull                      Generate models from database schema
+          db:generate                  Generate migration from model diff
 
         Generator commands:
           g:migration NAME             Create a new migration
@@ -129,6 +131,12 @@ module Ralph
           ./ralph.cr db:migrate
           ./ralph.cr db:seed
           ./ralph.cr g:model User name:string email:string
+          ./ralph.cr db:pull                           # Pull all tables
+          ./ralph.cr db:pull --tables=users,posts      # Pull specific tables
+          ./ralph.cr db:pull --dry-run                 # Preview without generating
+          ./ralph.cr db:generate                       # Generate migration
+          ./ralph.cr db:generate --name add_users      # Named migration
+          ./ralph.cr db:generate --dry-run             # Preview changes
           crystal run ./ralph.cr -- db:migrate -d postgres://localhost/myapp
         HELP
       end
@@ -136,7 +144,7 @@ module Ralph
       private def handle_db_command(args : Array(String))
         if args.empty?
           @output.puts "Error: db command requires a subcommand"
-          @output.puts "Available subcommands: create, drop, migrate, rollback, status, version, seed, reset, setup, pool"
+          @output.puts "Available subcommands: create, drop, migrate, rollback, status, version, seed, reset, setup, pool, pull, generate"
           exit 1
         end
 
@@ -175,6 +183,10 @@ module Ralph
           setup_database
         when "pool"
           pool_status(db)
+        when "pull"
+          pull_schema(db, args[1..])
+        when "generate"
+          generate_migration(db, args[1..])
         else
           @output.puts "Unknown db command: #{subcommand}"
           exit 1
@@ -575,6 +587,167 @@ module Ralph
       private def generate_model(name : String, fields : Array(String))
         generator = Generators::ModelGenerator.new(name, fields, @models_dir, @migrations_dir)
         generator.run
+      end
+
+      # Pull models from database schema (db:pull command)
+      private def pull_schema(db, args : Array(String))
+        tables : Array(String)? = nil
+        skip_tables = [] of String
+        overwrite = false
+        dry_run = false
+
+        # Parse options
+        i = 0
+        while i < args.size
+          arg = args[i]
+          case arg
+          when "--tables"
+            i += 1
+            if i < args.size
+              tables = args[i].split(",").map(&.strip)
+            end
+          when .starts_with?("--tables=")
+            tables = arg.split("=", 2).last.split(",").map(&.strip)
+          when "--skip"
+            i += 1
+            if i < args.size
+              skip_tables = args[i].split(",").map(&.strip)
+            end
+          when .starts_with?("--skip=")
+            skip_tables = arg.split("=", 2).last.split(",").map(&.strip)
+          when "--overwrite"
+            overwrite = true
+          when "--dry-run"
+            dry_run = true
+          when "--models"
+            i += 1
+            @models_dir = args[i] if i < args.size
+          when .starts_with?("--models=")
+            @models_dir = arg.split("=", 2).last
+          end
+          i += 1
+        end
+
+        puller = SchemaPuller.new(
+          db: db,
+          output_dir: @models_dir,
+          tables: tables,
+          skip_tables: skip_tables,
+          overwrite: overwrite,
+          output: @output
+        )
+
+        if dry_run
+          puller.preview
+        else
+          puller.run
+        end
+      end
+
+      # Generate migration from model diff (db:generate command)
+      private def generate_migration(db, args : Array(String))
+        name = "auto_migration"
+        dry_run = false
+
+        # Parse options
+        i = 0
+        while i < args.size
+          arg = args[i]
+          case arg
+          when "--name"
+            i += 1
+            name = args[i] if i < args.size
+          when .starts_with?("--name=")
+            name = arg.split("=", 2).last
+          when "--dry-run"
+            dry_run = true
+          when "-m", "--migrations"
+            i += 1
+            @migrations_dir = args[i] if i < args.size
+          when .starts_with?("--migrations=")
+            @migrations_dir = arg.split("=", 2).last
+          end
+          i += 1
+        end
+
+        # Extract model schemas from registered models
+        @output.puts "Analyzing models..."
+        model_schemas = Ralph::Schema::ModelSchemaExtractor.extract_all
+
+        if model_schemas.empty?
+          @output.puts "No models found. Make sure your models inherit from Ralph::Model."
+          return
+        end
+
+        @output.puts "Found #{model_schemas.size} model(s)"
+
+        # Introspect database schema
+        @output.puts "Introspecting database..."
+        db_schema = db.introspect_schema
+        @output.puts "Found #{db_schema.tables.size} table(s)"
+        @output.puts ""
+
+        # Compare schemas
+        comparator = Ralph::Schema::SchemaComparator.new(model_schemas, db_schema, db.dialect)
+        diff = comparator.compare
+
+        if diff.empty?
+          @output.puts "No changes detected. Database schema is up to date."
+          return
+        end
+
+        # Display changes
+        @output.puts "Changes detected:"
+        diff.changes.each do |change|
+          icon = change.destructive? ? "⚠️ " : "  "
+          case change.type
+          when .create_table?
+            @output.puts "#{icon}+ CREATE TABLE #{change.table}"
+          when .drop_table?
+            @output.puts "#{icon}- DROP TABLE #{change.table}"
+          when .add_column?
+            @output.puts "#{icon}+ ADD COLUMN #{change.table}.#{change.column} (#{change.details["type"]})"
+          when .remove_column?
+            @output.puts "#{icon}- REMOVE COLUMN #{change.table}.#{change.column}"
+          when .change_column_type?
+            @output.puts "#{icon}~ CHANGE TYPE #{change.table}.#{change.column}: #{change.details["from"]} -> #{change.details["to"]}"
+          when .change_column_nullable?
+            @output.puts "#{icon}~ CHANGE NULL #{change.table}.#{change.column}: #{change.details["from"]} -> #{change.details["to"]}"
+          when .add_foreign_key?
+            @output.puts "#{icon}+ ADD FK #{change.table}.#{change.column} -> #{change.details["to_table"]}"
+          when .remove_foreign_key?
+            @output.puts "#{icon}- REMOVE FK #{change.table}.#{change.column}"
+          end
+        end
+        @output.puts ""
+
+        # Show warnings
+        unless diff.warnings.empty?
+          @output.puts "Warnings:"
+          diff.warnings.each { |w| @output.puts "  ⚠️  #{w}" }
+          @output.puts ""
+        end
+
+        if dry_run
+          @output.puts "Dry run - no files generated"
+          return
+        end
+
+        # Generate migration
+        generator = Ralph::Schema::MigrationGenerator.new(
+          diff: diff,
+          name: name,
+          output_dir: @migrations_dir,
+          dialect: db.dialect
+        )
+
+        path = generator.generate!
+        @output.puts "Generated: #{path}"
+
+        if diff.has_destructive_changes?
+          @output.puts ""
+          @output.puts "⚠️  This migration contains destructive changes. Review carefully!"
+        end
       end
 
       # Extract database name from a PostgreSQL URL

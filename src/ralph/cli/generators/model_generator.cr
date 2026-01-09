@@ -156,7 +156,7 @@ MIGRATION
         end
 
         private def pluralize(str : String) : String
-          str.ends_with?("s") ? str : str + "s"
+          str.pluralize
         end
       end
     end

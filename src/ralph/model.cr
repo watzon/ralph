@@ -408,6 +408,9 @@ module Ralph
 
         # Generate instance method for nested preloading
         _generate_preload_on_class
+
+        # Register model with schema registry for db:generate discovery
+        Ralph::Schema.register_model(\{{@type}})
       end
     end
 

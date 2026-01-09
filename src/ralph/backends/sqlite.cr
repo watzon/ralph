@@ -280,6 +280,179 @@ module Ralph
         :sqlite
       end
 
+      # ========================================
+      # Schema Introspection Implementation
+      # ========================================
+
+      # Get all user table names (excluding system tables)
+      def table_names : Array(String)
+        sql = <<-SQL
+          SELECT name FROM sqlite_master
+          WHERE type = 'table'
+          AND name NOT LIKE 'sqlite_%'
+          AND name != 'schema_migrations'
+          ORDER BY name
+        SQL
+
+        names = [] of String
+        rs = query_all(sql)
+        begin
+          while rs.move_next
+            names << rs.read(String)
+          end
+        ensure
+          rs.close
+        end
+        names
+      end
+
+      # Get column information for a specific table
+      def introspect_columns(table : String) : Array(Schema::DatabaseColumn)
+        columns = [] of Schema::DatabaseColumn
+
+        # PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+        rs = query_all("PRAGMA table_info(\"#{escape_identifier(table)}\")")
+        begin
+          while rs.move_next
+            _cid = rs.read(Int32 | Int64)
+            name = rs.read(String)
+            col_type = rs.read(String)
+            not_null = rs.read(Int32 | Int64) == 1
+            default_value = rs.read(String | Nil)
+            is_pk = rs.read(Int32 | Int64) != 0
+
+            # Detect autoincrement - need to check if it's INTEGER PRIMARY KEY
+            # SQLite only auto-increments INTEGER PRIMARY KEY (rowid alias)
+            auto_increment = is_pk && col_type.upcase == "INTEGER"
+
+            columns << Schema::DatabaseColumn.new(
+              name: name,
+              type: col_type,
+              nullable: !not_null,
+              default: default_value,
+              primary_key: is_pk,
+              auto_increment: auto_increment
+            )
+          end
+        ensure
+          rs.close
+        end
+
+        columns
+      end
+
+      # Get index information for a specific table
+      def introspect_indexes(table : String) : Array(Schema::DatabaseIndex)
+        indexes = [] of Schema::DatabaseIndex
+
+        # PRAGMA index_list returns: seq, name, unique, origin, partial
+        rs = query_all("PRAGMA index_list(\"#{escape_identifier(table)}\")")
+        index_info = [] of NamedTuple(name: String, unique: Bool, origin: String)
+        begin
+          while rs.move_next
+            _seq = rs.read(Int32 | Int64)
+            name = rs.read(String)
+            unique = rs.read(Int32 | Int64) == 1
+            origin = rs.read(String)
+            _partial = rs.read(Int32 | Int64)
+
+            index_info << {name: name, unique: unique, origin: origin}
+          end
+        ensure
+          rs.close
+        end
+
+        # Get columns for each index
+        index_info.each do |info|
+          columns = [] of String
+
+          # PRAGMA index_info returns: seqno, cid, name
+          col_rs = query_all("PRAGMA index_info(\"#{escape_identifier(info[:name])}\")")
+          begin
+            while col_rs.move_next
+              _seqno = col_rs.read(Int32 | Int64)
+              _cid = col_rs.read(Int32 | Int64)
+              col_name = col_rs.read(String | Nil)
+              columns << col_name if col_name
+            end
+          ensure
+            col_rs.close
+          end
+
+          indexes << Schema::DatabaseIndex.new(
+            name: info[:name],
+            table: table,
+            columns: columns,
+            unique: info[:unique],
+            type: nil # SQLite doesn't have index types like PostgreSQL
+          )
+        end
+
+        indexes
+      end
+
+      # Get foreign key constraints FROM a table (outgoing FKs)
+      def introspect_foreign_keys(table : String) : Array(Schema::DatabaseForeignKey)
+        foreign_keys = [] of Schema::DatabaseForeignKey
+
+        # PRAGMA foreign_key_list returns: id, seq, table, from, to, on_update, on_delete, match
+        rs = query_all("PRAGMA foreign_key_list(\"#{escape_identifier(table)}\")")
+        begin
+          while rs.move_next
+            _id = rs.read(Int32 | Int64)
+            _seq = rs.read(Int32 | Int64)
+            to_table = rs.read(String)
+            from_column = rs.read(String)
+            to_column = rs.read(String)
+            on_update = rs.read(String)
+            on_delete = rs.read(String)
+            _match = rs.read(String)
+
+            foreign_keys << Schema::DatabaseForeignKey.new(
+              name: nil, # SQLite doesn't name FK constraints
+              from_table: table,
+              from_column: from_column,
+              to_table: to_table,
+              to_column: to_column,
+              on_delete: Schema.parse_referential_action(on_delete),
+              on_update: Schema.parse_referential_action(on_update)
+            )
+          end
+        ensure
+          rs.close
+        end
+
+        foreign_keys
+      end
+
+      # Get foreign key constraints TO a table (incoming FKs)
+      #
+      # This requires scanning all tables since SQLite doesn't have a
+      # reverse lookup for foreign keys.
+      def introspect_foreign_keys_referencing(table : String) : Array(Schema::DatabaseForeignKey)
+        incoming_fks = [] of Schema::DatabaseForeignKey
+
+        # Check each table's foreign keys to see if they reference this table
+        table_names.each do |other_table|
+          next if other_table == table
+
+          foreign_keys = introspect_foreign_keys(other_table)
+          foreign_keys.each do |fk|
+            if fk.to_table == table
+              incoming_fks << fk
+            end
+          end
+        end
+
+        incoming_fks
+      end
+
+      # Escape an identifier for safe use in SQL
+      private def escape_identifier(name : String) : String
+        # Double up any double quotes in the name
+        name.gsub("\"", "\"\"")
+      end
+
       # Whether WAL mode is enabled
       def wal_mode? : Bool
         @wal_mode

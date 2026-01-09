@@ -8,6 +8,11 @@ crystal: '>= 1.18.2'
 
 license: MIT
 
+dependencies:
+  cadmium_inflector:
+    github: cadmiumcr/inflector
+    version: ~> 0.2.0
+
 development_dependencies:
   sqlite3:
     github: crystal-lang/crystal-sqlite3
