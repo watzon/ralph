@@ -49,4 +49,4 @@ jobs:
         run: crystal tool format --check
 
       - name: Run tests
-        run: crystal spec
+        run: crystal spec -Dskip_postgres_tests --tag "~docs"

@@ -5,7 +5,7 @@ postgres_url = ENV["POSTGRES_URL"]?
 {% if flag?(:skip_postgres_tests) %}
   # Skip all postgres tests when flag is set
 {% else %}
-  describe Ralph::Database::PostgresBackend do
+  describe Ralph::Database::PostgresBackend, tags: "postgres" do
     if postgres_url.nil?
       pending "Requires POSTGRES_URL environment variable"
     end

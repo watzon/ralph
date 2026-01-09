@@ -3,7 +3,7 @@ require "../../postgres_spec_helper"
 {% if flag?(:skip_postgres_tests) %}
   # Skip all postgres tests when flag is set
 {% else %}
-  describe "PostgreSQL Special Functions" do
+  describe "PostgreSQL Special Functions", tags: "postgres" do
     before_all do
       Ralph.configure do |config|
         config.database = Ralph::Database::PostgresBackend.new(POSTGRES_URL)

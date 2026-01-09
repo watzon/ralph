@@ -5,13 +5,17 @@ default:
 install:
     shards install
 
-# Run all tests minus docs tests
+# Run all tests (excludes postgres and docs by default)
 test:
-    crystal spec --tag "~docs"
+    crystal spec -Dskip_postgres_tests --tag "~docs"
 
-# Run all tests including docs
+# Run all tests including docs (still excludes postgres)
 test-all:
-    crystal spec
+    crystal spec -Dskip_postgres_tests
+
+# Run postgres integration tests (requires POSTGRES_URL env var)
+test-postgres:
+    crystal spec --tag "postgres"
 
 # Run docs tests only (results are cached for speed)
 test-docs:
