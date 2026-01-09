@@ -42,7 +42,7 @@ module Ralph
 
         schema.each_table do |table|
           class_name = classify(table.name)
-          file_name = "#{singularize(table.name).underscore}.cr"
+          file_name = "#{table.name.singularize.underscore}.cr"
 
           @output.puts "  #{class_name} (#{table.name})"
           @output.puts "    File: #{@output_dir}/#{file_name}"
