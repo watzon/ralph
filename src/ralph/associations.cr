@@ -208,6 +208,11 @@ module Ralph
    name_str = klass_or_decl.var.id.stringify
    class_name = klass_or_decl.type.id.stringify
    class_name_override = true
+ elsif options[:class_name]
+   # Name with class_name option: belongs_to user, class_name: "Blog::User"
+   name_str = klass_or_decl.id.stringify
+   class_name = options[:class_name].id.stringify
+   class_name_override = true
  else
    # Simple form: belongs_to User
    class_name = klass_or_decl.id.stringify
@@ -611,6 +616,10 @@ module Ralph
       {% if klass_or_decl.is_a?(TypeDeclaration) %}
         {% name_str = klass_or_decl.var.id.stringify %}
         {% class_name = klass_or_decl.type.id.stringify %}
+      {% elsif options[:class_name] %}
+        # Name with class_name option: has_one profile, class_name: "Blog::Profile"
+        {% name_str = klass_or_decl.id.stringify %}
+        {% class_name = options[:class_name].id.stringify %}
       {% else %}
         # Simple syntax: has_one Profile
         {% class_name = klass_or_decl.id.stringify %}
@@ -987,6 +996,11 @@ module Ralph
       {% if klass_or_decl.is_a?(TypeDeclaration) %}
         {% name_str = klass_or_decl.var.id.stringify %}
         {% class_name = klass_or_decl.type.id.stringify %}
+        {% singular_name = name_str.ends_with?("s") ? name_str[0...-1] : name_str %}
+      {% elsif options[:class_name] %}
+        # Name with class_name option: has_many posts, class_name: "Blog::Post"
+        {% name_str = klass_or_decl.id.stringify %}
+        {% class_name = options[:class_name].id.stringify %}
         {% singular_name = name_str.ends_with?("s") ? name_str[0...-1] : name_str %}
       {% else %}
         # Simple syntax: has_many Post or has_many Post, ->(q) { ... }, as: :custom_name
