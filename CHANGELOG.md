@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.3] - 2026-01-09
+
+### Added
+
+- **Athena Framework Plugin**: New plugin system with Athena framework integration including configuration, migration listeners, and service integration.
+- **Schema Introspection CLI**: `db:pull` command introspects existing database and generates Ralph model files with columns, associations, and validations inferred from schema constraints.
+- **Schema Diff CLI**: `db:generate` command compares model definitions against database schema and generates diff-based migrations for synchronization.
+- **Nil-Safe Column Types**: Non-nullable column declarations now return their declared type instead of always returning `Type | Nil`, eliminating excessive nil-guards. Non-nullable columns get a `column?` accessor for safe nil-checking.
+- **Bulk Operations**: `insert_all`, `upsert_all`, `update_all`, `delete_all` methods for high-performance batch database operations.
+- **Statement Cache**: LRU prepared statement cache for improved query performance.
+- **Identity Map**: Per-request model caching for reduced memory usage and consistent object identity.
+- **Soft Deletes**: `ActsAsParanoid` module for soft delete support with `deleted_at` column, `restore` method, and scopes (`with_deleted`, `only_deleted`).
+- **Documentation Validation**: Parallel code block validation infrastructure for ensuring documentation examples compile.
+- **Type Declaration Syntax**: Crystal-idiomatic type declaration syntax for column and association macros (e.g., `column name : String`, `has_many posts : Post`).
+
+### Fixed
+
+- **validations**: Use fully qualified `Query::Builder` namespace to avoid compilation errors.
+- **cli**: Use correct singularize method in schema puller.
+- **postgres**: Handle non-Int primary keys in insert; split insert method for auto-increment vs non-auto-increment PKs.
+
+### Changed
+
+- **Breaking**: Remove deprecated symbol syntax from association macros; use type declaration syntax instead.
+- Extract timestamps functionality to standalone `Ralph::Timestamps` module for better modularity.
+- Reorganize examples into framework-specific directories (athena-blog, kemal-blog).
+
+### Documentation
+
+- Split large documentation pages into focused modules for better navigation and maintainability.
+- Add soft deletes guide covering `ActsAsParanoid` usage.
+- Expand and reorganize migrations documentation into focused pages.
+- Update timestamps documentation to module pattern.
+- Add testing and development guide with `--tag "~docs"` for fast test execution.
+
 ## [1.0.0-beta.2] - 2026-01-08
 
 ### Added
