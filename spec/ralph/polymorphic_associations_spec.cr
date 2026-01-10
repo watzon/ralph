@@ -136,6 +136,36 @@ module Ralph
       # Using type declaration syntax with polymorphic
       has_many comments : Ralph::PolymorphicTests::Comment, polymorphic: :commentable
     end
+
+    # ========================================
+    # Model with pre-defined polymorphic columns
+    # This tests the fix for column duplication when
+    # columns are manually defined before belongs_to polymorphic
+    # ========================================
+
+    class PreDefinedColumnsComment < Model
+      table "poly_test_predefined_comments"
+
+      column id : Int64, primary: true
+      column body : String
+
+      # IMPORTANT: These columns are manually defined BEFORE the polymorphic association
+      # The fix in model.cr should prevent duplicate column definitions
+      column attachable_type : String?
+      column attachable_id : String?
+
+      # This should NOT create duplicate columns for attachable_type and attachable_id
+      belongs_to polymorphic: :attachable
+    end
+
+    class Image < Model
+      table "poly_test_images"
+
+      column id : Int64, primary: true
+      column url : String
+
+      has_many Ralph::PolymorphicTests::PreDefinedColumnsComment, polymorphic: :attachable
+    end
   end
 
   describe "Polymorphic Associations" do
@@ -213,6 +243,20 @@ module Ralph
           title TEXT
         )
       SQL
+
+      # Create tables for pre-defined columns test (column duplication fix)
+      TestSchema.create_table("poly_test_predefined_comments") do |t|
+        t.primary_key
+        t.string("body")
+        # Polymorphic ID is stored as string to support any primary key type
+        t.string("attachable_id")
+        t.string("attachable_type")
+      end
+
+      TestSchema.create_table("poly_test_images") do |t|
+        t.primary_key
+        t.string("url")
+      end
     end
 
     after_all do
@@ -232,6 +276,8 @@ module Ralph
       Ralph.database.execute("DELETE FROM poly_test_videos")
       Ralph.database.execute("DELETE FROM poly_test_string_posts")
       Ralph.database.execute("DELETE FROM poly_test_uuid_posts")
+      Ralph.database.execute("DELETE FROM poly_test_predefined_comments")
+      Ralph.database.execute("DELETE FROM poly_test_images")
     end
 
     describe "polymorphic belongs_to" do
@@ -806,6 +852,69 @@ module Ralph
 
         stored_id.should eq(uuid.to_s)
         stored_type.should eq("Ralph::PolymorphicTests::UUIDPost")
+      end
+    end
+
+    describe "pre-defined polymorphic columns (column duplication fix)" do
+      it "does not cause duplicate column errors when columns are pre-defined" do
+        # This test verifies the fix for the issue where manually defining
+        # polymorphic columns (e.g., attachable_type, attachable_id) before
+        # using belongs_to polymorphic: :attachable would cause a
+        # "true_id does not exist" SQL error due to duplicate column definitions.
+
+        # If the fix works, this model should compile and work correctly
+        comment = PolymorphicTests::PreDefinedColumnsComment.new(body: "Test")
+
+        # Should have both columns available
+        comment.responds_to?(:attachable_id).should be_true
+        comment.responds_to?(:attachable_type).should be_true
+      end
+
+      it "polymorphic association works with pre-defined columns" do
+        image = PolymorphicTests::Image.create(url: "https://example.com/image.jpg")
+
+        comment = PolymorphicTests::PreDefinedColumnsComment.new(body: "Nice image!")
+        comment.attachable = image
+        comment.save
+
+        comment.attachable_type.should eq("Ralph::PolymorphicTests::Image")
+        comment.attachable_id.should eq(image.id.to_s)
+
+        # Verify association can be loaded
+        reloaded = PolymorphicTests::PreDefinedColumnsComment.find(comment.id).not_nil!
+        reloaded.attachable.should_not be_nil
+        reloaded.attachable.not_nil!.should be_a(PolymorphicTests::Image)
+        reloaded.attachable.not_nil!.as(PolymorphicTests::Image).url.should eq("https://example.com/image.jpg")
+      end
+
+      it "has_many polymorphic works with pre-defined columns on child" do
+        image = PolymorphicTests::Image.create(url: "https://example.com/photo.png")
+
+        comment1 = PolymorphicTests::PreDefinedColumnsComment.new(body: "Comment 1")
+        comment1.attachable = image
+        comment1.save
+
+        comment2 = PolymorphicTests::PreDefinedColumnsComment.new(body: "Comment 2")
+        comment2.attachable = image
+        comment2.save
+
+        # Reload and verify has_many works
+        reloaded = PolymorphicTests::Image.find(image.id).not_nil!
+        reloaded.pre_defined_columns_comments.size.should eq(2)
+      end
+
+      it "column metadata is correct for pre-defined columns" do
+        columns = PolymorphicTests::PreDefinedColumnsComment.columns
+
+        # Verify columns exist and have correct types
+        columns.has_key?("attachable_type").should be_true
+        columns.has_key?("attachable_id").should be_true
+
+        # Both should be nilable String (type_name includes the union with Nil)
+        columns["attachable_type"].type_name.should contain("String")
+        columns["attachable_type"].nilable.should be_true
+        columns["attachable_id"].type_name.should contain("String")
+        columns["attachable_id"].nilable.should be_true
       end
     end
   end

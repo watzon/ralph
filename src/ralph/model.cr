@@ -522,48 +522,52 @@ module Ralph
         {% end %}
       {% end %}
 
-      # Register column metadata with nullability info
-      {% unless @type.has_constant?("_ralph_column_{{col_name}}") %}
+      # Skip if column already defined (prevents duplicate definitions from polymorphic associations)
+      {% unless @type.has_constant?("_RALPH_COL_#{col_name.id.upcase}") %}
+        # Mark this column as defined to prevent duplicates
+        _RALPH_COL_{{col_name.id.upcase}} = true
+
+        # Register column metadata with nullability info
         @@columns[{{col_name.stringify}}] = Ralph::ColumnMetadata.new({{col_name.stringify}}, {{base_type}}, {{primary}}, {{col_default}}, {{is_nilable}})
-      {% end %}
 
-      # Define the property with nilable type internally to allow uninitialized state
-      @{{col_name}} : {{col_type}} | Nil
+        # Define the property with nilable type internally to allow uninitialized state
+        @{{col_name}} : {{col_type}} | Nil
 
-      # Getter - return type depends on declared nullability
-      {% if is_nilable %}
-        # Nullable column: return the nilable type directly
-        def {{col_name}} : {{col_type}}
-          {% if col_default %}
-            @{{col_name}} ||= {{col_default}}
-          {% else %}
+        # Getter - return type depends on declared nullability
+        {% if is_nilable %}
+          # Nullable column: return the nilable type directly
+          def {{col_name}} : {{col_type}}
+            {% if col_default %}
+              @{{col_name}} ||= {{col_default}}
+            {% else %}
+              @{{col_name}}
+            {% end %}
+          end
+        {% else %}
+          # Non-nullable column: return non-nil type, raise if accessed before set
+          def {{col_name}} : {{col_type}}
+            {% if col_default %}
+              @{{col_name}} ||= {{col_default}}
+            {% else %}
+              if (val = @{{col_name}}).nil?
+                raise NilAssertionError.new("Column '{{col_name}}' is nil but declared as non-nullable {{col_type}}. Ensure the value is set before accessing.")
+              else
+                val
+              end
+            {% end %}
+          end
+
+          # Also provide a nilable accessor for cases where nil-check is desired
+          def {{col_name}}? : {{col_type}} | Nil
             @{{col_name}}
-          {% end %}
-        end
-      {% else %}
-        # Non-nullable column: return non-nil type, raise if accessed before set
-        def {{col_name}} : {{col_type}}
-          {% if col_default %}
-            @{{col_name}} ||= {{col_default}}
-          {% else %}
-            if (val = @{{col_name}}).nil?
-              raise NilAssertionError.new("Column '{{col_name}}' is nil but declared as non-nullable {{col_type}}. Ensure the value is set before accessing.")
-            else
-              val
-            end
-          {% end %}
-        end
+          end
+        {% end %}
 
-        # Also provide a nilable accessor for cases where nil-check is desired
-        def {{col_name}}? : {{col_type}} | Nil
-          @{{col_name}}
+        # Setter
+        def {{col_name}}=(value : {{col_type}} | Nil)
+          @{{col_name}} = value
         end
       {% end %}
-
-      # Setter
-      def {{col_name}}=(value : {{col_type}} | Nil)
-        @{{col_name}} = value
-      end
     end
 
     # Get the table name for this model
