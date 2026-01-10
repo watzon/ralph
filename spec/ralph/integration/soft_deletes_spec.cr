@@ -14,6 +14,24 @@ module Ralph
     column email : String?
   end
 
+  # Test model with UUID primary key and soft deletes
+  class SoftDeleteUUIDModel < Model
+    include Ralph::Timestamps
+    include Ralph::ActsAsParanoid
+
+    table "soft_delete_uuid_records"
+
+    column id : UUID, primary: true
+    column name : String
+    column email : String?
+
+    # UUID PKs need to be generated before insert (unlike Int64 which is auto-increment)
+    @[Ralph::Callbacks::BeforeCreate]
+    def generate_uuid
+      self.id = UUID.random if @id.nil?
+    end
+  end
+
   # Test model without soft deletes for comparison
   class HardDeleteModel < Model
     table "hard_delete_records"
@@ -68,18 +86,28 @@ module Ralph
         t.string("callback_log")
         t.soft_deletes
       end
+
+      TestSchema.create_table("soft_delete_uuid_records") do |t|
+        t.uuid_primary_key
+        t.string("name")
+        t.string("email")
+        t.timestamps
+        t.soft_deletes
+      end
     end
 
     before_each do
       TestSchema.truncate_table("soft_delete_records")
       TestSchema.truncate_table("hard_delete_records")
       TestSchema.truncate_table("soft_delete_callback_records")
+      TestSchema.truncate_table("soft_delete_uuid_records")
     end
 
     after_all do
       TestSchema.drop_table("soft_delete_records")
       TestSchema.drop_table("hard_delete_records")
       TestSchema.drop_table("soft_delete_callback_records")
+      TestSchema.drop_table("soft_delete_uuid_records")
     end
 
     describe "ActsAsParanoid module" do
@@ -496,6 +524,108 @@ module Ralph
         found.should_not be_nil
         found.not_nil!.name.should eq("Updated")
         found.not_nil!.deleted?.should be_true
+      end
+    end
+
+    describe "UUID primary key support" do
+      it "soft deletes a record with UUID primary key" do
+        record = SoftDeleteUUIDModel.create(name: "UUID Test", email: "uuid@example.com")
+        id = record.id
+
+        record.deleted?.should be_false
+        record.destroy.should be_true
+        record.deleted?.should be_true
+        record.deleted_at.should_not be_nil
+
+        # Record should still exist in database (with deleted_at set)
+        found = SoftDeleteUUIDModel.find_with_deleted(id)
+        found.should_not be_nil
+        found.not_nil!.deleted_at.should_not be_nil
+      end
+
+      it "excludes soft-deleted UUID records from default queries" do
+        record1 = SoftDeleteUUIDModel.create(name: "Active UUID", email: "active@example.com")
+        record2 = SoftDeleteUUIDModel.create(name: "Deleted UUID", email: "deleted@example.com")
+
+        SoftDeleteUUIDModel.all.size.should eq(2)
+
+        record2.destroy
+
+        # Default query should exclude deleted record
+        all_records = SoftDeleteUUIDModel.all
+        all_records.size.should eq(1)
+        all_records.first.name.should eq("Active UUID")
+      end
+
+      it "restores a soft-deleted UUID record" do
+        record = SoftDeleteUUIDModel.create(name: "UUID Restore Test", email: "restore@example.com")
+        id = record.id
+
+        record.destroy
+        record.deleted?.should be_true
+
+        record.restore.should be_true
+        record.deleted?.should be_false
+        record.deleted_at.should be_nil
+
+        # Should be findable again via default query
+        found = SoftDeleteUUIDModel.find(id)
+        found.should_not be_nil
+        found.not_nil!.deleted?.should be_false
+      end
+
+      it "really destroys a UUID record permanently" do
+        record = SoftDeleteUUIDModel.create(name: "UUID Hard Delete", email: "hard@example.com")
+        id = record.id
+
+        record.really_destroy!.should be_true
+
+        # Should not be findable at all
+        SoftDeleteUUIDModel.find(id).should be_nil
+        SoftDeleteUUIDModel.find_with_deleted(id).should be_nil
+      end
+
+      it "really destroys an already soft-deleted UUID record" do
+        record = SoftDeleteUUIDModel.create(name: "UUID Soft Then Hard", email: "softthenhard@example.com")
+        id = record.id
+
+        record.destroy # Soft delete first
+        record.deleted?.should be_true
+
+        record.really_destroy!.should be_true
+
+        # Should be completely gone
+        SoftDeleteUUIDModel.find_with_deleted(id).should be_nil
+      end
+
+      it "find excludes soft-deleted UUID records" do
+        record = SoftDeleteUUIDModel.create(name: "UUID Find Test", email: "find@example.com")
+        id = record.id
+
+        record.destroy
+
+        SoftDeleteUUIDModel.find(id).should be_nil
+      end
+
+      it "find_with_deleted finds soft-deleted UUID records" do
+        record = SoftDeleteUUIDModel.create(name: "UUID Find Deleted Test", email: "finddeleted@example.com")
+        id = record.id
+
+        record.destroy
+
+        found = SoftDeleteUUIDModel.find_with_deleted(id)
+        found.should_not be_nil
+        found.not_nil!.name.should eq("UUID Find Deleted Test")
+        found.not_nil!.deleted?.should be_true
+      end
+
+      it "count excludes soft-deleted UUID records" do
+        SoftDeleteUUIDModel.create(name: "Active1", email: "a1@example.com")
+        SoftDeleteUUIDModel.create(name: "Active2", email: "a2@example.com")
+        record3 = SoftDeleteUUIDModel.create(name: "Deleted", email: "deleted@example.com")
+        record3.destroy
+
+        SoftDeleteUUIDModel.count.should eq(2)
       end
     end
   end

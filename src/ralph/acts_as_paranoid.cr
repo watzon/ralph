@@ -256,17 +256,20 @@ module Ralph
 
         # Build UPDATE query instead of DELETE
         columns = ["\"deleted_at\""]
-        values = [deleted_at.as(Ralph::Query::DBValue)]
+        values = [] of Ralph::Query::DBValue
+        values << deleted_at
 
         \{% if @type.has_method?(:updated_at=) %}
           columns << "\"updated_at\""
-          values << updated_at.as(Ralph::Query::DBValue)
+          values << updated_at
         \{% end %}
 
         set_clause = columns.map_with_index { |col, i| "#{col} = $#{i + 1}" }.join(", ")
         where_param_index = values.size + 1
         sql = "UPDATE \"#{self.class.table_name}\" SET #{set_clause} WHERE \"#{self.class.primary_key}\" = $#{where_param_index}"
-        values << primary_key_value.as(Ralph::Query::DBValue)
+        # UUID primary keys are automatically converted to strings by the database backend
+        pk_val = primary_key_value
+        values << (pk_val.is_a?(UUID) ? pk_val : pk_val.as(Ralph::Query::DBValue))
 
         Ralph.database.execute(sql, args: values)
 

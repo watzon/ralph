@@ -1,7 +1,20 @@
 module Ralph
   module Query
     # Type alias for DB-compatible values
-    alias DBValue = Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil
+    # Includes UUID for convenience - UUIDs are converted to strings when passed to DB
+    alias DBValue = Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | UUID | Nil
+
+    # Convert DBValue array to DB::Any array (converts UUIDs to strings)
+    def self.to_db_args(args : Array(DBValue)) : Array(DB::Any)
+      args.map do |arg|
+        case arg
+        when UUID
+          arg.to_s.as(DB::Any)
+        else
+          arg.as(DB::Any)
+        end
+      end
+    end
 
     # Represents a WHERE clause
     class WhereClause
@@ -457,7 +470,7 @@ module Ralph
 
       # Add a WHERE NOT clause (returns new Builder)
       def where_not(clause : String, *args) : Builder
-        converted = args.to_a.map { |a| a.as(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil) }
+        converted = args.to_a.map { |a| a.as(DBValue) }
         with_wheres(@wheres + [WhereClause.new("NOT (#{clause})", converted)])
       end
 
@@ -706,7 +719,7 @@ module Ralph
 
       # Add a HAVING clause (returns new Builder)
       def having(clause : String, *args) : Builder
-        converted = args.to_a.map { |a| a.as(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil) }
+        converted = args.to_a.map { |a| a.as(DBValue) }
         with_havings(@havings + [WhereClause.new(clause, converted)])
       end
 
@@ -2401,22 +2414,22 @@ module Ralph
       end
 
       # Build the INSERT query
-      def build_insert(data : Hash(String, _)) : Tuple(String, Array(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil))
+      def build_insert(data : Hash(String, _)) : Tuple(String, Array(DBValue))
         columns = data.keys.map { |c| "\"#{c}\"" }.join(", ")
         placeholders = data.keys.map_with_index { |_, i| "$#{i + 1}" }.join(", ")
-        args = data.values.map(&.as(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil)).to_a
+        args = data.values.map(&.as(DBValue)).to_a
 
         query = "INSERT INTO \"#{@table}\" (#{columns}) VALUES (#{placeholders})"
         {query, args}
       end
 
       # Build the UPDATE query
-      def build_update(data : Hash(String, _)) : Tuple(String, Array(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil))
+      def build_update(data : Hash(String, _)) : Tuple(String, Array(DBValue))
         set_clause = data.keys.map_with_index do |col, i|
           "\"#{col}\" = $#{i + 1}"
         end.join(", ")
 
-        args = data.values.to_a
+        args = data.values.map(&.as(DBValue)).to_a
         where_args = @wheres.flat_map(&.args)
         args.concat(where_args)
 
@@ -2440,7 +2453,7 @@ module Ralph
       end
 
       # Build the DELETE query
-      def build_delete : Tuple(String, Array(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil))
+      def build_delete : Tuple(String, Array(DBValue))
         query = "DELETE FROM \"#{@table}\""
 
         unless @wheres.empty?
@@ -2497,7 +2510,7 @@ module Ralph
       end
 
       # Get the WHERE clause arguments
-      def where_args : Array(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil)
+      def where_args : Array(DBValue)
         @wheres.flat_map(&.args)
       end
 
@@ -2610,9 +2623,9 @@ module Ralph
     class WhereBuilder
       class Condition
         getter clause : String
-        getter args : Array(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil)
+        getter args : Array(DBValue)
 
-        def initialize(@clause : String, @args : Array(Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil) = [] of Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil)
+        def initialize(@clause : String, @args : Array(DBValue) = [] of DBValue)
         end
       end
 

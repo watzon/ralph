@@ -8,19 +8,19 @@ describe Ralph::Query::WhereClause do
   end
 
   it "converts args with placeholders" do
-    args = [18] of Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil
+    args = [18] of Ralph::Query::DBValue
     clause = Ralph::Query::WhereClause.new("age > ?", args)
     clause.to_sql.should eq("age > $1")
   end
 
   it "converts multiple placeholders" do
-    args = [18, 65] of Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil
+    args = [18, 65] of Ralph::Query::DBValue
     clause = Ralph::Query::WhereClause.new("age BETWEEN ? AND ?", args)
     clause.to_sql.should eq("age BETWEEN $1 AND $2")
   end
 
   it "stores arguments" do
-    args = ["Alice"] of Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | Nil
+    args = ["Alice"] of Ralph::Query::DBValue
     clause = Ralph::Query::WhereClause.new("name = ?", args)
     clause.args.should eq(["Alice"])
   end

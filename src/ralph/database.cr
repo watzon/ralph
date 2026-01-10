@@ -300,6 +300,38 @@ module Ralph
       def statement_cache_enabled? : Bool
         false
       end
+
+      # Convenience Methods for DBValue Arrays
+      # =======================================
+      #
+      # These methods accept Array(Query::DBValue) which includes UUID,
+      # and automatically convert to Array(DB::Any) for database execution.
+      # This provides seamless UUID support throughout the ORM.
+
+      # Execute with DBValue args (converts UUIDs to strings)
+      def execute(query : String, args : Array(Query::DBValue))
+        execute(query, args: Query.to_db_args(args))
+      end
+
+      # Insert with DBValue args (converts UUIDs to strings)
+      def insert(query : String, args : Array(Query::DBValue)) : Int64
+        insert(query, args: Query.to_db_args(args))
+      end
+
+      # Query one with DBValue args (converts UUIDs to strings)
+      def query_one(query : String, args : Array(Query::DBValue)) : ::DB::ResultSet?
+        query_one(query, args: Query.to_db_args(args))
+      end
+
+      # Query all with DBValue args (converts UUIDs to strings)
+      def query_all(query : String, args : Array(Query::DBValue)) : ::DB::ResultSet
+        query_all(query, args: Query.to_db_args(args))
+      end
+
+      # Scalar with DBValue args (converts UUIDs to strings)
+      def scalar(query : String, args : Array(Query::DBValue)) : DB::Any?
+        scalar(query, args: Query.to_db_args(args))
+      end
     end
   end
 end
