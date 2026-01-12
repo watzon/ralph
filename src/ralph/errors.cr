@@ -281,4 +281,22 @@ module Ralph
       super("Cannot delete record because #{association} exist")
     end
   end
+
+  # Raised when model columns don't match database schema
+  #
+  # This error indicates that the model definition has columns that don't exist
+  # in the database, or the database has columns not defined in the model.
+  # This commonly causes cryptic "column type mismatch" errors at runtime.
+  #
+  # ## Example
+  #
+  # ```
+  # # Call at startup to catch mismatches early:
+  # Supply.validate_schema!
+  # # => Ralph::SchemaMismatchError: Schema mismatch for Supply (table: supplies):
+  # #      Model has columns not in database: catalog_supply_id
+  # #      This will cause column type mismatch errors when reading records.
+  # ```
+  class SchemaMismatchError < Error
+  end
 end

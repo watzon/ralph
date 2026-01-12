@@ -722,7 +722,8 @@ module Ralph
         {% query_arg = block.args[0] %}
         {% query_var_name = query_arg.is_a?(TypeDeclaration) ? query_arg.var : query_arg %}
         def self.{{name.id}} : Ralph::Query::Builder
-          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name)
+          # Pre-select columns in model order to ensure consistent reading
+          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name).select(column_names_ordered)
           {{block.body}}
         end
       {% else %}
@@ -740,7 +741,8 @@ module Ralph
             {% end %}
           {% end %}
         ) : Ralph::Query::Builder
-          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name)
+          # Pre-select columns in model order to ensure consistent reading
+          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name).select(column_names_ordered)
           # Assign scope args to their expected names
           {% for arg, idx in user_args %}
             {% if arg.is_a?(TypeDeclaration) %}
@@ -1181,7 +1183,8 @@ module Ralph
     def self.find_all_with_query(query : Ralph::Query::Builder) : Array(self)
       # Ensure we select columns in the correct order for from_result_set
       query = query.select(column_names_ordered) if query.selects.empty?
-      results = Ralph.database.query_all(query.build_select, args: query.where_args)
+      sql = query.build_select
+      results = Ralph.database.query_all(sql, args: query.where_args)
       records = [] of self
       results.each do
         records << from_result_set(results)
@@ -1535,11 +1538,45 @@ module Ralph
             {% else %}
               self.{{ivar.name}}=rs.read(Int32)
             {% end %}
-          {% elsif type_str.includes?("Float64") %}
+          {% elsif type_str.includes?("Float32") %}
+            # Float32 - PostgreSQL REAL type or NUMERIC
+            %raw_float32 = rs.read(Float32 | PG::Numeric | Nil)
             {% if nilable %}
-              self.{{ivar.name}}=rs.read(Float64 | Nil)
+              if %raw_float32.nil?
+                self.{{ivar.name}} = nil
+              elsif %raw_float32.is_a?(PG::Numeric)
+                self.{{ivar.name}} = %raw_float32.to_f.to_f32
+              else
+                self.{{ivar.name}} = %raw_float32
+              end
             {% else %}
-              self.{{ivar.name}}=rs.read(Float64)
+              if %raw_float32.is_a?(PG::Numeric)
+                self.{{ivar.name}} = %raw_float32.to_f.to_f32
+              elsif %raw_float32
+                self.{{ivar.name}} = %raw_float32
+              else
+                self.{{ivar.name}} = 0.0_f32
+              end
+            {% end %}
+          {% elsif type_str.includes?("Float64") %}
+            # Float64 - PostgreSQL NUMERIC/DECIMAL returns PG::Numeric
+            %raw_float = rs.read(PG::Numeric | Float64 | Nil)
+            {% if nilable %}
+              if %raw_float.nil?
+                self.{{ivar.name}} = nil
+              elsif %raw_float.is_a?(PG::Numeric)
+                self.{{ivar.name}} = %raw_float.to_f64
+              else
+                self.{{ivar.name}} = %raw_float
+              end
+            {% else %}
+              if %raw_float.is_a?(PG::Numeric)
+                self.{{ivar.name}} = %raw_float.to_f64
+              elsif %raw_float
+                self.{{ivar.name}} = %raw_float
+              else
+                self.{{ivar.name}} = 0.0
+              end
             {% end %}
           {% elsif type_str.includes?("String") %}
             {% if nilable %}
@@ -1767,6 +1804,26 @@ module Ralph
               %instance.{{ivar.name}}={{rs}}.read(Int32 | Nil)
             {% else %}
               %instance.{{ivar.name}}={{rs}}.read(Int32)
+            {% end %}
+          {% elsif type_str.includes?("Float32") %}
+            # Float32 - PostgreSQL REAL type or NUMERIC (which returns PG::Numeric)
+            %raw_float32 = {{rs}}.read(Float32 | PG::Numeric | Nil)
+            {% if nilable %}
+              if %raw_float32.nil?
+                %instance.{{ivar.name}} = nil
+              elsif %raw_float32.is_a?(PG::Numeric)
+                %instance.{{ivar.name}} = %raw_float32.to_f.to_f32
+              else
+                %instance.{{ivar.name}} = %raw_float32
+              end
+            {% else %}
+              if %raw_float32.is_a?(PG::Numeric)
+                %instance.{{ivar.name}} = %raw_float32.to_f.to_f32
+              elsif %raw_float32
+                %instance.{{ivar.name}} = %raw_float32
+              else
+                %instance.{{ivar.name}} = 0.0_f32
+              end
             {% end %}
           {% elsif type_str.includes?("Float64") %}
             # Float64 - PostgreSQL NUMERIC/DECIMAL returns PG::Numeric
@@ -2060,6 +2117,28 @@ module Ralph
                   self.{{ivar.name}} = %val.to_i32
                 else
                   self.{{ivar.name}} = 0_i32
+                end
+              {% end %}
+            {% elsif type_str.includes?("Float32") %}
+              {% if nilable %}
+                %val = {{value}}
+                if %val.nil?
+                  self.{{ivar.name}} = nil
+                elsif %val.is_a?(Float32)
+                  self.{{ivar.name}} = %val.as(Float32)
+                elsif %val.responds_to?(:to_f32)
+                  self.{{ivar.name}} = %val.to_f32
+                else
+                  self.{{ivar.name}} = nil
+                end
+              {% else %}
+                %val = {{value}}
+                if %val.is_a?(Float32)
+                  self.{{ivar.name}} = %val.as(Float32)
+                elsif %val.responds_to?(:to_f32)
+                  self.{{ivar.name}} = %val.to_f32
+                else
+                  self.{{ivar.name}} = 0.0_f32
                 end
               {% end %}
             {% elsif type_str.includes?("Float64") %}
