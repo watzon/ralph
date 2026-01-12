@@ -746,15 +746,23 @@ module Ralph
             all_columns << fk.to_inline_sql
           end
 
-          columns_sql = all_columns.join(", ")
-
           pk_constraint = if @primary_key_column && !@primary_key_sql
-                            ", PRIMARY KEY (\"#{@primary_key_column}\")"
+                            "PRIMARY KEY (\"#{@primary_key_column}\")"
                           else
-                            ""
+                            nil
                           end
 
-          "CREATE TABLE IF NOT EXISTS \"#{@name}\" (#{columns_sql}#{pk_constraint})"
+          all_columns << pk_constraint if pk_constraint
+
+          # Format with each column on its own line for readability
+          if all_columns.size <= 1
+            # Single column - keep on one line
+            "CREATE TABLE IF NOT EXISTS \"#{@name}\" (#{all_columns.join(", ")})"
+          else
+            # Multiple columns - format with newlines
+            columns_sql = all_columns.map { |col| "    #{col}" }.join(",\n")
+            "CREATE TABLE IF NOT EXISTS \"#{@name}\" (\n#{columns_sql}\n)"
+          end
         end
 
         getter indexes : Array(IndexDefinition)

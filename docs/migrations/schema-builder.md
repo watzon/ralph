@@ -1,24 +1,30 @@
-# Schema Builder
+# Schema Reference
 
-The Schema Builder provides a fluent DSL for defining and modifying your database tables within migrations.
+The Schema module provides a DSL for describing database tables and columns. This is primarily used for:
 
-## Creating Tables
+- **Schema introspection**: Generating documentation about your database structure
+- **Model code generation**: The `db:pull` command uses this to generate model files from existing tables
+- **Schema comparison**: The `db:generate` command compares model definitions against the database
 
-Use `create_table` to define a new table. Inside the block, you define the columns and indexes.
+!!! note "SQL Migrations"
+    For actual database migrations, Ralph uses plain SQL files with `-- +migrate Up/Down` markers.
+    See the [Introduction](introduction.md) for details on creating and running migrations.
 
-<!-- skip-compile -->
+## Table Definition DSL
+
+The `TableDefinition` class provides methods for describing table structures:
+
 ```crystal
-create_table :products do |t|
-  t.primary_key             # Adds 'id' INTEGER PRIMARY KEY
-  t.string :name, size: 100, null: false
-  t.text :description
-  t.decimal :price, precision: 10, scale: 2
-  t.boolean :active, default: true
-  t.timestamps              # Adds 'created_at' and 'updated_at'
-  t.soft_deletes            # Adds 'deleted_at'
+definition = Ralph::Migrations::Schema::TableDefinition.new("products")
+definition.primary_key
+definition.string("name", size: 100, null: false)
+definition.text("description")
+definition.decimal("price", precision: 10, scale: 2)
+definition.boolean("active", default: true)
+definition.timestamps
 
-  t.index :name             # Adds an index on the 'name' column
-end
+# Generate SQL
+puts definition.to_sql
 ```
 
 ## Available Column Types
@@ -59,8 +65,6 @@ Ralph provides specialized types with automatic backend adaptation:
 | `uuid_array`      | `TEXT`      | `UUID[]`        | Array of UUIDs                 |
 | `array`           | `TEXT`      | Varies          | Generic array (specify element_type) |
 
-**Note**: SQLite stores JSON and arrays as TEXT with validation constraints. PostgreSQL uses native types for better performance and indexing.
-
 ## Column Options
 
 All column methods accept an optional set of options:
@@ -71,243 +75,117 @@ All column methods accept an optional set of options:
 - `size: Int32` - Specify the size for `string` (VARCHAR) columns.
 - `precision: Int32` and `scale: Int32` - Specify dimensions for `decimal` columns.
 
-<!-- skip-compile -->
-```crystal
-t.string :status, null: false, default: "draft", size: 50
-```
+## Dialect Support
 
-## Associations and References
-
-Use `reference` (or its aliases `references` and `belongs_to`) to create foreign key columns.
-
-<!-- skip-compile -->
-```crystal
-create_table :comments do |t|
-  t.references :user        # Adds 'user_id' BIGINT and an index
-  t.references :post        # Adds 'post_id' BIGINT and an index
-end
-
-# Polymorphic associations
-create_table :attachments do |t|
-  t.references :attachable, polymorphic: true
-  # Adds 'attachable_id' BIGINT, 'attachable_type' VARCHAR, and an index
-end
-```
-
-## Modifying Existing Tables
-
-You can also modify tables after they've been created.
-
-### Adding Columns
-
-<!-- skip-compile -->
-```crystal
-add_column :users, :bio, :text
-add_column :users, :points, :integer, default: 0
-```
-
-### Removing Columns
-
-<!-- skip-compile -->
-```crystal
-remove_column :users, :bio
-```
-
-_Note: In SQLite, removing a column is supported in modern versions, but older ones may require recreating the table._
-
-### Renaming Columns
-
-<!-- skip-compile -->
-```crystal
-rename_column :users, :points, :karma
-```
-
-### References
-
-<!-- skip-compile -->
-```crystal
-add_reference :posts, :author             # Adds author_id
-remove_reference :posts, :author          # Removes author_id
-```
-
-## Indexes
-
-Indexes improve query performance but can slow down writes. Use them for columns that appear frequently in `WHERE` clauses.
-
-### Creating Indexes
-
-<!-- skip-compile -->
-```crystal
-# Inside create_table
-t.index :email, unique: true
-
-# Standalone
-add_index :users, :last_name
-add_index :users, :email, unique: true, name: "idx_user_emails"
-```
-
-### Removing Indexes
-
-<!-- skip-compile -->
-```crystal
-remove_index :users, :last_name
-remove_index :users, name: "idx_user_emails"
-```
-
-## Advanced Type Examples
-
-For detailed examples of using JSON, UUID, Enum, and Array column types in migrations, see [Types Documentation](../models/types.md).
-
-Quick reference:
-
-<!-- skip-compile -->
-```crystal
-create_table :products do |t|
-  t.primary_key
-
-  # JSON/JSONB for structured data
-  t.jsonb :metadata, default: "{}"
-
-  # UUID for distributed IDs
-  t.uuid :api_key, null: false
-
-  # Enums for constrained values
-  t.enum :status, values: ["draft", "active", "archived"]
-
-  # Arrays for collections
-  t.string_array :tags, default: "[]"
-
-  t.timestamps
-end
-```
-
-## Comprehensive Example
+The Schema module supports multiple database dialects:
 
 ```crystal
-class CreateStoreSchema_20240101120000 < Ralph::Migrations::Migration
-  migration_version 20240101120000
+# SQLite dialect
+sqlite_dialect = Ralph::Migrations::Schema::Dialect::Sqlite.new
+definition = Ralph::Migrations::Schema::TableDefinition.new("users", sqlite_dialect)
+definition.primary_key
+puts definition.to_sql
+# => CREATE TABLE IF NOT EXISTS "users" ("id" INTEGER PRIMARY KEY AUTOINCREMENT)
 
-  def up : Nil
-    create_table :categories do |t|
-      t.primary_key
-      t.string :slug, null: false
-      t.string :name, null: false
-      t.timestamps
-      t.index :slug, unique: true
-    end
-
-    create_table :products do |t|
-      t.primary_key
-      t.references :category
-      t.string :sku, null: false
-      t.string :title, null: false
-      t.text :description
-      t.decimal :price, precision: 12, scale: 2, default: 0.0
-      t.integer :stock_quantity, default: 0
-      t.boolean :published, default: false
-      
-      # Advanced types
-      t.string_array :tags, default: "[]"
-      t.jsonb :specifications, default: "{}"
-      t.enum :status, values: ["draft", "active", "archived"]
-      
-      t.timestamps
-
-      t.index :sku, unique: true
-      t.index :published
-    end
-  end
-
-  def down : Nil
-    drop_table :products
-    drop_table :categories
-  end
-end
+# PostgreSQL dialect  
+pg_dialect = Ralph::Migrations::Schema::Dialect::Postgres.new
+definition = Ralph::Migrations::Schema::TableDefinition.new("users", pg_dialect)
+definition.primary_key
+puts definition.to_sql
+# => CREATE TABLE IF NOT EXISTS "users" ("id" BIGSERIAL PRIMARY KEY)
 ```
 
-## Advanced Type Migration Methods
+## Primary Key Types
 
-You can add advanced type columns to existing tables:
+The schema DSL supports various primary key types:
 
-<!-- skip-compile -->
 ```crystal
-# JSON/JSONB columns
-add_column :posts, :metadata, :jsonb, default: "{}"
+# Auto-incrementing integer (default)
+t.primary_key                    # INTEGER PRIMARY KEY AUTOINCREMENT (SQLite)
+                                 # BIGSERIAL PRIMARY KEY (PostgreSQL)
 
-# UUID columns
-add_column :users, :api_key, :uuid
+# UUID primary key
+t.uuid_primary_key               # CHAR(36) PRIMARY KEY NOT NULL (SQLite)
+                                 # UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid() (PostgreSQL)
 
-# Enum columns
-add_column :users, :role, :enum, values: ["user", "admin", "moderator"]
+# String primary key
+t.string_primary_key("key")      # TEXT PRIMARY KEY NOT NULL
 
-# Array columns
-add_column :posts, :tags, :string_array, default: "[]"
+# Typed primary key
+t.primary_key("id", :uuid)       # Explicit type selection
 ```
 
-## Backend-Specific Considerations
+## Index Definitions
 
-### PostgreSQL
+The schema module can describe various index types:
 
-PostgreSQL provides native support for advanced types with full indexing:
-
-<!-- skip-compile -->
 ```crystal
-create_table :analytics do |t|
-  t.primary_key
-  t.jsonb :event_data
-  t.uuid :session_id
-  t.string_array :tags
-  t.timestamps
-end
+# Basic index
+t.index("email", unique: true)
 
-# GIN indexes for fast JSON and array queries
-add_index :analytics, :event_data, using: :gin
-add_index :analytics, :tags, using: :gin
-
-# B-tree index for UUID
-add_index :analytics, :session_id
+# PostgreSQL-specific indexes
+t.gin_index("metadata")           # GIN index for JSONB/arrays
+t.gist_index("coordinates")       # GiST index for geometric data
+t.full_text_index("content")      # Full-text search index
+t.partial_index("email", condition: "active = true")
+t.expression_index("lower(email)", name: "idx_email_lower")
 ```
 
-### SQLite
+## Foreign Key Definitions
 
-SQLite stores advanced types as TEXT with validation constraints:
-
-<!-- skip-compile -->
 ```crystal
-# Same migration works on SQLite
-create_table :analytics do |t|
-  t.primary_key
-  t.jsonb :event_data      # Stored as TEXT with json_valid() CHECK
-  t.uuid :session_id       # Stored as CHAR(36) with format CHECK
-  t.string_array :tags     # Stored as TEXT with JSON array CHECK
-  t.timestamps
-end
+# Reference column with foreign key
+t.reference("user", null: false, on_delete: :cascade)
 
-# Standard indexes (no GIN equivalent)
-add_index :analytics, :session_id
+# Explicit foreign key
+t.foreign_key("users", on_delete: :cascade)
+
+# Polymorphic reference
+t.reference("commentable", polymorphic: true)
 ```
 
-The same migration code works on both backends - Ralph automatically adapts the SQL generation.
+## Using Schema for SQL Generation
 
-## PostgreSQL Indexes
+While migrations should be written in plain SQL, you can use the schema DSL to help generate SQL:
 
-PostgreSQL offers specialized index types (GIN, GiST, Full-Text, Partial, Expression) for advanced use cases like JSONB queries, full-text search, geometric data, and conditional indexing.
-
-For detailed documentation on PostgreSQL-specific indexes, see [PostgreSQL-Specific Indexes](postgres-indexes.md).
-
-Quick example:
-
-<!-- skip-compile -->
 ```crystal
-create_table :articles do |t|
-  t.primary_key
-  t.jsonb :metadata, default: "{}"
-  t.string_array :tags, default: "[]"
+# Generate CREATE TABLE SQL
+definition = Ralph::Migrations::Schema::TableDefinition.new("users")
+definition.primary_key
+definition.string("email", null: false)
+definition.timestamps
 
-  # GIN index for fast JSONB and array queries
-  t.gin_index("metadata")
-  t.gin_index("tags")
-
-  t.timestamps
-end
+sql = definition.to_sql
+puts sql
+# CREATE TABLE IF NOT EXISTS "users" (
+#     "id" BIGSERIAL PRIMARY KEY,
+#     "email" VARCHAR(255) NOT NULL,
+#     "created_at" TIMESTAMP,
+#     "updated_at" TIMESTAMP
+# )
 ```
+
+Then copy this SQL into your migration file:
+
+```sql
+-- +migrate Up
+CREATE TABLE IF NOT EXISTS "users" (
+    "id" BIGSERIAL PRIMARY KEY,
+    "email" VARCHAR(255) NOT NULL,
+    "created_at" TIMESTAMP,
+    "updated_at" TIMESTAMP
+);
+
+-- +migrate Down
+DROP TABLE IF EXISTS "users";
+```
+
+## PostgreSQL-Specific Indexes
+
+For detailed documentation on PostgreSQL-specific indexes (GIN, GiST, Full-Text, Partial, Expression), see [PostgreSQL-Specific Indexes](postgres-indexes.md).
+
+## See Also
+
+- [Introduction](introduction.md) - Creating and running SQL migrations
+- [PostgreSQL Indexes](postgres-indexes.md) - Advanced PostgreSQL index types
+- [Types Documentation](../models/types.md) - Model type definitions

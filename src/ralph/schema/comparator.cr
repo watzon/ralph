@@ -28,12 +28,15 @@ module Ralph
       property columns : Array(ModelColumn)
       property foreign_keys : Array(ModelForeignKey)
       property indexes : Array(DatabaseIndex)
+      # Columns that are polymorphic FK columns (stored as String in model but may be UUID/Int in DB)
+      property polymorphic_fk_columns : Set(String)
 
       def initialize(
         @table_name : String,
         @columns : Array(ModelColumn) = [] of ModelColumn,
         @foreign_keys : Array(ModelForeignKey) = [] of ModelForeignKey,
         @indexes : Array(DatabaseIndex) = [] of DatabaseIndex,
+        @polymorphic_fk_columns : Set(String) = Set(String).new,
       )
       end
 
@@ -45,6 +48,11 @@ module Ralph
       # Check if model has a column
       def has_column?(name : String) : Bool
         @columns.any? { |c| c.name == name }
+      end
+
+      # Check if column is a polymorphic FK column
+      def polymorphic_fk?(name : String) : Bool
+        @polymorphic_fk_columns.includes?(name)
       end
     end
 
@@ -104,16 +112,32 @@ module Ralph
 
     # Compares model schemas against database schema
     class SchemaComparator
+      # Tables that are always skipped (ORM migration tracking tables from various frameworks)
+      DEFAULT_SKIP_TABLES = [
+        "schema_migrations",      # Ralph
+        "adonis_schema",          # AdonisJS
+        "adonis_schema_versions", # AdonisJS
+        "ar_internal_metadata",   # Rails ActiveRecord
+        "knex_migrations",        # Knex.js
+        "knex_migrations_lock",   # Knex.js
+        "typeorm_metadata",       # TypeORM
+        "_prisma_migrations",     # Prisma
+      ]
+
       @model_schemas : Hash(String, ModelSchema)
       @db_schema : DatabaseSchema
       @dialect : Symbol
+      @skip_tables : Array(String)
 
-      def initialize(@model_schemas, @db_schema, @dialect = :sqlite)
+      def initialize(@model_schemas, @db_schema, @dialect = :sqlite, @skip_tables = [] of String)
+        # Merge user-provided skip tables with defaults
+        @skip_tables = (DEFAULT_SKIP_TABLES + @skip_tables).uniq
       end
 
       def compare : SchemaDiff
         changes = [] of SchemaChange
         warnings = [] of String
+        tables_being_created = Set(String).new
 
         # 1. Find tables in models but not in DB (need to create)
         @model_schemas.each do |table_name, model_schema|
@@ -123,6 +147,9 @@ module Ralph
               table: table_name,
               details: {"columns" => model_schema.columns.map(&.name).join(", ")}
             )
+            # Track this table as being created - FK constraints will be included
+            # in the CREATE TABLE statement, so we don't need separate AddForeignKey changes
+            tables_being_created << table_name
             next
           end
 
@@ -134,8 +161,9 @@ module Ralph
 
         # 2. Find tables in DB but not in models (might drop, with warning)
         @db_schema.table_names.each do |db_table_name|
-          # Skip internal tables
-          next if db_table_name.starts_with?("_") || db_table_name == "schema_migrations"
+          # Skip internal tables (prefixed with _) and tables in the skip list
+          next if db_table_name.starts_with?("_")
+          next if @skip_tables.includes?(db_table_name)
 
           unless @model_schemas.has_key?(db_table_name)
             changes << SchemaChange.new(
@@ -187,18 +215,22 @@ module Ralph
           next unless db_col = db_cols[name]?
 
           # Compare types (simplified - would need proper mapping)
+          # Skip type comparison for polymorphic FK columns - they're stored as String
+          # in models but the actual DB type may be uuid, bigint, etc.
           db_sql_type = map_db_type_to_symbol(db_col.type)
-          if model_col.sql_type != db_sql_type
-            changes << SchemaChange.new(
-              type: ChangeType::ChangeColumnType,
-              table: model.table_name,
-              column: name,
-              details: {
-                "from" => db_col.type,
-                "to"   => model_col.sql_type.to_s,
-              },
-              warning: "Type change may cause data loss"
-            )
+          unless model.polymorphic_fk?(name)
+            if model_col.sql_type != db_sql_type
+              changes << SchemaChange.new(
+                type: ChangeType::ChangeColumnType,
+                table: model.table_name,
+                column: name,
+                details: {
+                  "from" => db_col.type,
+                  "to"   => model_col.sql_type.to_s,
+                },
+                warning: "Type change may cause data loss"
+              )
+            end
           end
 
           # Compare nullable

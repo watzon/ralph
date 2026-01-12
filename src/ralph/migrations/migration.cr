@@ -1,556 +1,253 @@
+# SQL Migration File Parser and Representation
+#
+# Parses SQL migration files with -- +migrate Up/Down markers.
+# Compatible with goose, micrate, and similar SQL migration tools.
+#
+# ## File Format
+#
+# ```sql
+# -- +migrate Up
+# CREATE TABLE users (
+#     id BIGSERIAL PRIMARY KEY,
+#     name VARCHAR(255) NOT NULL
+# );
+#
+# -- +migrate Down
+# DROP TABLE IF EXISTS users;
+# ```
+#
+# ## Statement Separation
+#
+# By default, statements are separated by semicolons. For complex statements
+# (functions, triggers) that contain semicolons, use StatementBegin/StatementEnd:
+#
+# ```sql
+# -- +migrate Up
+# -- +migrate StatementBegin
+# CREATE OR REPLACE FUNCTION update_timestamp()
+# RETURNS TRIGGER AS $$
+# BEGIN
+#     NEW.updated_at = NOW();
+#     RETURN NEW;
+# END;
+# $$ LANGUAGE plpgsql;
+# -- +migrate StatementEnd
+# ```
+#
+# ## No Transaction
+#
+# Some statements (like CREATE INDEX CONCURRENTLY) cannot run in a transaction.
+# Use the NoTransaction directive:
+#
+# ```sql
+# -- +migrate Up
+# -- +migrate NoTransaction
+# CREATE INDEX CONCURRENTLY idx_users_email ON users(email);
+# ```
 module Ralph
   module Migrations
-    # Abstract base class for migrations
-    #
-    # Migration files should inherit from this class and implement
-    # the `up` and `down` methods.
-    #
-    # Example:
-    # ```
-    # class CreateUsersTable < Ralph::Migrations::Migration
-    #   def up
-    #     create_table :users do |t|
-    #       t.column :id, :integer, primary: true
-    #       t.column :name, :string, size: 255
-    #       t.column :email, :string, size: 255
-    #       t.column :created_at, :timestamp
-    #       t.timestamps
-    #     end
-    #   end
-    #
-    #   def down
-    #     drop_table :users
-    #   end
-    # end
-    # ```
-    abstract class Migration
-      getter database : Database::Backend
+    # Represents a parsed SQL migration file
+    class Migration
+      # The migration version (timestamp from filename)
+      getter version : String
 
-      def initialize(@database : Database::Backend)
+      # The migration name (derived from filename)
+      getter name : String
+
+      # Full path to the .sql file
+      getter filepath : String
+
+      # SQL statements for the up migration
+      getter up_statements : Array(String)
+
+      # SQL statements for the down migration
+      getter down_statements : Array(String)
+
+      # Whether to run outside a transaction
+      getter? no_transaction : Bool
+
+      def initialize(
+        @version : String,
+        @name : String,
+        @filepath : String,
+        @up_statements : Array(String) = [] of String,
+        @down_statements : Array(String) = [] of String,
+        @no_transaction : Bool = false,
+      )
       end
 
-      # Execute SQL with error wrapping
-      #
-      # Wraps database exceptions with `MigrationError` to provide helpful context
-      # about what operation failed and why.
-      private def execute_with_context(sql : String, operation : String, table : String? = nil)
-        @database.execute(sql)
-      rescue ex : Exception
-        raise MigrationError.new(
-          ex.message || "Unknown error",
-          operation: operation,
-          table: table,
-          sql: sql,
-          backend: @database.dialect,
-          cause: ex
+      # Parse a migration file from disk
+      def self.from_file(filepath : String) : Migration
+        Parser.parse_file(filepath)
+      end
+
+      # Check if migration has up statements
+      def has_up? : Bool
+        !@up_statements.empty?
+      end
+
+      # Check if migration has down statements
+      def has_down? : Bool
+        !@down_statements.empty?
+      end
+
+      # Get combined up SQL (for display/debugging)
+      def up_sql : String
+        @up_statements.join("\n\n")
+      end
+
+      # Get combined down SQL (for display/debugging)
+      def down_sql : String
+        @down_statements.join("\n\n")
+      end
+
+      # Comparison for sorting (by version)
+      def <=>(other : Migration)
+        @version <=> other.version
+      end
+    end
+
+    # Parser for SQL migration files
+    module Parser
+      # Directive markers
+      MIGRATE_UP       = /^\s*--\s*\+migrate\s+Up\s*$/i
+      MIGRATE_DOWN     = /^\s*--\s*\+migrate\s+Down\s*$/i
+      STATEMENT_BEGIN  = /^\s*--\s*\+migrate\s+StatementBegin\s*$/i
+      STATEMENT_END    = /^\s*--\s*\+migrate\s+StatementEnd\s*$/i
+      NO_TRANSACTION   = /^\s*--\s*\+migrate\s+NoTransaction\s*$/i
+      SQL_COMMENT      = /^\s*--/
+      EMPTY_LINE       = /^\s*$/
+      FILENAME_PATTERN = /^(\d+)_(.+)\.sql$/
+
+      # Parse a migration file
+      def self.parse_file(filepath : String) : Migration
+        unless File.exists?(filepath)
+          raise MigrationParseError.new("Migration file not found: #{filepath}")
+        end
+
+        filename = File.basename(filepath)
+        match = FILENAME_PATTERN.match(filename)
+        unless match
+          raise MigrationParseError.new(
+            "Invalid migration filename: #{filename}. " \
+            "Expected format: TIMESTAMP_name.sql (e.g., 20260111143000_create_users.sql)"
+          )
+        end
+
+        version = match[1]
+        name = match[2]
+
+        content = File.read(filepath)
+        up_statements, down_statements, no_transaction = parse_content(content)
+
+        Migration.new(
+          version: version,
+          name: name,
+          filepath: filepath,
+          up_statements: up_statements,
+          down_statements: down_statements,
+          no_transaction: no_transaction
         )
       end
 
-      # Apply the migration
-      abstract def up
+      # Parse migration content string
+      def self.parse_content(content : String) : Tuple(Array(String), Array(String), Bool)
+        up_statements = [] of String
+        down_statements = [] of String
+        no_transaction = false
 
-      # Rollback the migration
-      abstract def down
+        current_section : Symbol? = nil
+        lines_buffer = [] of String
+        in_statement_block = false
 
-      # Get the migration version number
-      #
-      # Subclasses should override this
-      def self.version : String
-        "0"
-      end
-
-      # Macro to set the migration version
-      macro migration_version(num)
-        def self.version : String
-          "#{{{num}}}"
-        end
-      end
-
-      def create_table(name : String, &block : Schema::TableDefinition ->)
-        dialect = Schema::Dialect.current
-        definition = Schema::TableDefinition.new(name, dialect)
-        block.call(definition)
-
-        sql = definition.to_sql
-        execute_with_context(sql, "create_table", name)
-
-        definition.indexes.each do |index|
-          execute_with_context(index.to_sql, "add_index", name)
-        end
-      end
-
-      # Drop an existing table
-      def drop_table(name : String)
-        execute_with_context("DROP TABLE IF EXISTS \"#{name}\"", "drop_table", name)
-      end
-
-      def add_column(table : String, name : String, type : Symbol, **options)
-        dialect = Schema::Dialect.current
-        opts = options.to_h.transform_values(&.as(String | Int32 | Int64 | Float64 | Bool | Symbol | Nil))
-        column_def = Schema::ColumnDefinition.new(name, type, dialect, opts)
-        sql = "ALTER TABLE \"#{table}\" ADD COLUMN #{column_def.to_sql}"
-        execute_with_context(sql, "add_column '#{name}'", table)
-      end
-
-      # Remove a column from a table
-      def remove_column(table : String, name : String)
-        sql = "ALTER TABLE \"#{table}\" DROP COLUMN \"#{name}\""
-        execute_with_context(sql, "remove_column '#{name}'", table)
-      end
-
-      # Rename a column
-      def rename_column(table : String, old_name : String, new_name : String)
-        sql = "ALTER TABLE \"#{table}\" RENAME COLUMN \"#{old_name}\" TO \"#{new_name}\""
-        execute_with_context(sql, "rename_column '#{old_name}' to '#{new_name}'", table)
-      end
-
-      # Add an index
-      def add_index(table : String, column : String, name : String? = nil, unique : Bool = false)
-        index_name = name || "index_#{table}_on_#{column}"
-        unique_sql = unique ? "UNIQUE" : ""
-        sql = "CREATE #{unique_sql} INDEX IF NOT EXISTS \"#{index_name}\" ON \"#{table}\" (\"#{column}\")"
-        execute_with_context(sql, "add_index '#{index_name}'", table)
-      end
-
-      # Remove an index
-      def remove_index(table : String, column : String? = nil, name : String? = nil)
-        index_name = name || "index_#{table}_on_#{column}"
-        execute_with_context("DROP INDEX IF EXISTS \"#{index_name}\"", "remove_index '#{index_name}'", table)
-      end
-
-      # Add a reference column (foreign key) to an existing table
-      #
-      # ## Options
-      #
-      # - **polymorphic**: If true, creates both name_id and name_type columns
-      # - **null**: Allow NULL values (default: true)
-      # - **foreign_key**: Create a database-level FK constraint (default: false)
-      # - **to_table**: Target table for FK constraint (default: pluralized name)
-      # - **on_delete**: FK action on delete - :cascade, :nullify, :restrict, :no_action
-      # - **on_update**: FK action on update - :cascade, :nullify, :restrict, :no_action
-      # - **index**: Add an index (default: true)
-      #
-      # ## Usage
-      #
-      # ```
-      # add_reference("posts", "user")                                 # Adds user_id column
-      # add_reference("posts", "user", null: false, foreign_key: true) # With NOT NULL and FK
-      # add_reference("posts", "author", to_table: "users", on_delete: :cascade)
-      # add_reference("comments", "commentable", polymorphic: true) # Polymorphic
-      # ```
-      def add_reference(table : String, name : String, polymorphic : Bool = false, null : Bool = true, foreign_key : Bool = false, to_table : String? = nil, on_delete : Symbol? = nil, on_update : Symbol? = nil, index : Bool = true)
-        if polymorphic
-          # Add both ID and type columns
-          # Polymorphic IDs are stored as strings to support any primary key type
-          # (Int64, String, UUID, etc.)
-          id_col = "#{name}_id"
-          type_col = "#{name}_type"
-
-          add_column(table, id_col, :string, null: null)
-          add_column(table, type_col, :string, null: null)
-          add_index(table, id_col, name: "index_#{table}_on_#{id_col}") if index
-        else
-          # Regular reference
-          col_name = "#{name}_id"
-          target_table = to_table || "#{name}s"
-
-          add_column(table, col_name, :bigint, null: null)
-          add_index(table, col_name) if index
-
-          # Add FK constraint if requested
-          if foreign_key || on_delete || on_update
-            add_foreign_key(table, target_table, column: col_name, on_delete: on_delete, on_update: on_update)
-          end
-        end
-      end
-
-      # Alias for add_reference (Rails compatibility)
-      def add_references(table : String, name : String, polymorphic : Bool = false, null : Bool = true, foreign_key : Bool = false, to_table : String? = nil, on_delete : Symbol? = nil, on_update : Symbol? = nil, index : Bool = true)
-        add_reference(table, name, polymorphic: polymorphic, null: null, foreign_key: foreign_key, to_table: to_table, on_delete: on_delete, on_update: on_update, index: index)
-      end
-
-      # Alias for add_reference (Rails compatibility)
-      def add_belongs_to(table : String, name : String, polymorphic : Bool = false, null : Bool = true, foreign_key : Bool = false, to_table : String? = nil, on_delete : Symbol? = nil, on_update : Symbol? = nil, index : Bool = true)
-        add_reference(table, name, polymorphic: polymorphic, null: null, foreign_key: foreign_key, to_table: to_table, on_delete: on_delete, on_update: on_update, index: index)
-      end
-
-      # Remove a reference column from a table
-      #
-      # ## Options
-      #
-      # - **polymorphic**: If true, removes both name_id and name_type columns
-      # - **foreign_key**: Also remove the FK constraint (default: false)
-      # - **to_table**: Target table for FK constraint name derivation
-      def remove_reference(table : String, name : String, polymorphic : Bool = false, foreign_key : Bool = false, to_table : String? = nil)
-        if polymorphic
-          # Remove both ID and type columns
-          id_col = "#{name}_id"
-          type_col = "#{name}_type"
-
-          remove_index(table, id_col, name: "index_#{table}_on_#{id_col}")
-          remove_column(table, type_col)
-          remove_column(table, id_col)
-        else
-          # Regular reference
-          col_name = "#{name}_id"
-          target_table = to_table || "#{name}s"
-
-          # Remove FK constraint first if it exists
-          if foreign_key
-            remove_foreign_key(table, target_table, column: col_name)
+        content.each_line do |line|
+          # Check for directives
+          if MIGRATE_UP.matches?(line)
+            # Flush any pending statement
+            flush_statement(lines_buffer, current_section, up_statements, down_statements)
+            current_section = :up
+            next
+          elsif MIGRATE_DOWN.matches?(line)
+            flush_statement(lines_buffer, current_section, up_statements, down_statements)
+            current_section = :down
+            next
+          elsif STATEMENT_BEGIN.matches?(line)
+            in_statement_block = true
+            next
+          elsif STATEMENT_END.matches?(line)
+            if in_statement_block
+              # Flush the entire block as one statement
+              flush_statement(lines_buffer, current_section, up_statements, down_statements)
+              in_statement_block = false
+            end
+            next
+          elsif NO_TRANSACTION.matches?(line)
+            no_transaction = true
+            next
           end
 
-          remove_index(table, col_name)
-          remove_column(table, col_name)
-        end
-      end
+          # Skip if we're not in a section yet
+          next unless current_section
 
-      # Alias for remove_reference (Rails compatibility)
-      def remove_references(table : String, name : String, polymorphic : Bool = false, foreign_key : Bool = false, to_table : String? = nil)
-        remove_reference(table, name, polymorphic: polymorphic, foreign_key: foreign_key, to_table: to_table)
-      end
+          # If in a statement block, accumulate everything
+          if in_statement_block
+            lines_buffer << line
+            next
+          end
 
-      # Alias for remove_reference (Rails compatibility)
-      def remove_belongs_to(table : String, name : String, polymorphic : Bool = false, foreign_key : Bool = false, to_table : String? = nil)
-        remove_reference(table, name, polymorphic: polymorphic, foreign_key: foreign_key, to_table: to_table)
-      end
+          # Normal mode: accumulate until semicolon
+          stripped = line.strip
 
-      # Add a foreign key constraint to an existing table
-      #
-      # ## Options
-      #
-      # - **column**: Source column (default: `{to_table singularized}_id`)
-      # - **primary_key**: Target column (default: "id")
-      # - **on_delete**: Action on delete - :cascade, :nullify, :restrict, :no_action
-      # - **on_update**: Action on update - :cascade, :nullify, :restrict, :no_action
-      # - **name**: Custom constraint name
-      #
-      # ## Usage
-      #
-      # ```
-      # add_foreign_key("posts", "users")                         # posts.user_id -> users.id
-      # add_foreign_key("posts", "users", on_delete: :cascade)    # With CASCADE
-      # add_foreign_key("posts", "users", column: "author_id")    # Custom column
-      # add_foreign_key("posts", "users", name: "fk_post_author") # Custom name
-      # ```
-      def add_foreign_key(from_table : String, to_table : String, column : String? = nil, primary_key : String = "id", on_delete : Symbol? = nil, on_update : Symbol? = nil, name : String? = nil)
-        # Check for SQLite limitation upfront
-        if @database.dialect == :sqlite
-          raise UnsupportedOperationError.new(
-            "add_foreign_key (ALTER TABLE ADD CONSTRAINT)",
-            :sqlite,
-            "Define foreign keys inline when creating the table using `t.foreign_key` inside `create_table`"
-          )
-        end
+          # Skip pure comment lines and empty lines for cleaner output
+          # but keep them if they're part of a multi-line statement
+          if lines_buffer.empty?
+            if SQL_COMMENT.matches?(line) && !line.includes?("+migrate")
+              next
+            elsif EMPTY_LINE.matches?(line)
+              next
+            end
+          end
 
-        fk = Schema::ForeignKeyDefinition.new(
-          from_table: from_table,
-          from_column: column || "#{to_table.chomp("s")}_id",
-          to_table: to_table,
-          to_column: primary_key,
-          on_delete: on_delete,
-          on_update: on_update,
-          name: name
-        )
-        execute_with_context(fk.to_add_sql, "add_foreign_key to '#{to_table}'", from_table)
-      end
+          lines_buffer << line
 
-      # Remove a foreign key constraint
-      #
-      # ## Options
-      #
-      # - **column**: Source column for deriving constraint name
-      # - **name**: Explicit constraint name to drop
-      #
-      # ## Usage
-      #
-      # ```
-      # remove_foreign_key("posts", "users") # Drop fk_posts_user_id
-      # remove_foreign_key("posts", "users", column: "author_id")
-      # remove_foreign_key("posts", name: "fk_post_author") # By explicit name
-      # ```
-      def remove_foreign_key(from_table : String, to_table : String? = nil, column : String? = nil, name : String? = nil)
-        # Check for SQLite limitation upfront
-        if @database.dialect == :sqlite
-          raise UnsupportedOperationError.new(
-            "remove_foreign_key (ALTER TABLE DROP CONSTRAINT)",
-            :sqlite,
-            "SQLite does not support removing foreign keys. You must recreate the table without the constraint."
-          )
-        end
-
-        constraint_name = name || begin
-          col = column || (to_table ? "#{to_table.chomp("s")}_id" : nil)
-          raise ArgumentError.new("Must provide column, to_table, or name to remove_foreign_key") unless col
-          "fk_#{from_table}_#{col}"
-        end
-        sql = "ALTER TABLE \"#{from_table}\" DROP CONSTRAINT \"#{constraint_name}\""
-        execute_with_context(sql, "remove_foreign_key '#{constraint_name}'", from_table)
-      end
-
-      # Rename a table
-      #
-      # ## Usage
-      #
-      # ```
-      # rename_table("old_users", "users")
-      # ```
-      def rename_table(old_name : String, new_name : String)
-        sql = "ALTER TABLE \"#{old_name}\" RENAME TO \"#{new_name}\""
-        execute_with_context(sql, "rename_table '#{old_name}' to '#{new_name}'", old_name)
-      end
-
-      # Change a column's type, null constraint, or default value
-      #
-      # ## Options
-      #
-      # - **type**: New column type (optional - only change if specified)
-      # - **null**: Allow NULL values (optional)
-      # - **default**: Default value (optional, use :drop to remove default)
-      #
-      # ## Usage
-      #
-      # ```
-      # change_column("users", "age", type: :bigint)
-      # change_column("users", "name", null: false)
-      # change_column("users", "status", default: "active")
-      # change_column("users", "email", type: :text, null: false, default: "")
-      # ```
-      #
-      # NOTE: SQLite has limited ALTER TABLE support. This method may require
-      # table recreation for complex changes on SQLite.
-      def change_column(table : String, column : String, type : Symbol? = nil, null : Bool? = nil, default : String | Int32 | Int64 | Float64 | Bool | Symbol | Nil = nil)
-        # Check for SQLite limitation upfront for certain operations
-        if @database.dialect == :sqlite && (type || !null.nil?)
-          raise UnsupportedOperationError.new(
-            "change_column (ALTER COLUMN TYPE/NULL)",
-            :sqlite,
-            "SQLite does not support ALTER COLUMN. You must recreate the table with the new schema."
-          )
-        end
-
-        dialect = Schema::Dialect.current
-
-        # For PostgreSQL/MySQL style databases that support proper ALTER COLUMN
-        if type
-          type_sql = dialect.column_type(type, {} of Symbol => String | Int32 | Int64 | Float64 | Bool | Symbol | Nil)
-          sql = "ALTER TABLE \"#{table}\" ALTER COLUMN \"#{column}\" TYPE #{type_sql}"
-          execute_with_context(sql, "change_column '#{column}' type", table)
-        end
-
-        if !null.nil?
-          if null
-            sql = "ALTER TABLE \"#{table}\" ALTER COLUMN \"#{column}\" DROP NOT NULL"
-            execute_with_context(sql, "change_column '#{column}' drop not null", table)
-          else
-            sql = "ALTER TABLE \"#{table}\" ALTER COLUMN \"#{column}\" SET NOT NULL"
-            execute_with_context(sql, "change_column '#{column}' set not null", table)
+          # Check if line ends with semicolon (statement terminator)
+          if stripped.ends_with?(";")
+            flush_statement(lines_buffer, current_section, up_statements, down_statements)
           end
         end
 
-        if default == :drop
-          sql = "ALTER TABLE \"#{table}\" ALTER COLUMN \"#{column}\" DROP DEFAULT"
-          execute_with_context(sql, "change_column '#{column}' drop default", table)
-        elsif !default.nil?
-          default_sql = case default
-                        when String then "'#{default}'"
-                        when true   then "TRUE"
-                        when false  then "FALSE"
-                        else             default.to_s
-                        end
-          sql = "ALTER TABLE \"#{table}\" ALTER COLUMN \"#{column}\" SET DEFAULT #{default_sql}"
-          execute_with_context(sql, "change_column '#{column}' set default", table)
+        # Flush any remaining content
+        flush_statement(lines_buffer, current_section, up_statements, down_statements)
+
+        {up_statements, down_statements, no_transaction}
+      end
+
+      # Flush current buffer to appropriate statement array
+      private def self.flush_statement(
+        buffer : Array(String),
+        section : Symbol?,
+        up : Array(String),
+        down : Array(String),
+      ) : Nil
+        sql = buffer.join("\n").strip
+        buffer.clear
+
+        return if sql.empty?
+
+        case section
+        when :up
+          up << sql
+        when :down
+          down << sql
         end
       end
+    end
 
-      # Change a column's type (convenience method)
-      def change_column_type(table : String, column : String, new_type : Symbol)
-        change_column(table, column, type: new_type)
-      end
-
-      # Change a column's null constraint (convenience method)
-      def change_column_null(table : String, column : String, allow_null : Bool)
-        change_column(table, column, null: allow_null)
-      end
-
-      # Change a column's default value (convenience method)
-      def change_column_default(table : String, column : String, new_default : String | Int32 | Int64 | Float64 | Bool | Nil)
-        change_column(table, column, default: new_default)
-      end
-
-      # ========================================
-      # PostgreSQL-Specific Index Methods
-      # ========================================
-
-      # Add a GIN index (PostgreSQL only)
-      #
-      # GIN (Generalized Inverted Index) is optimized for:
-      # - JSONB containment queries (@>, ?, ?|, ?&)
-      # - Array overlap/containment (&&, @>, <@)
-      # - Full-text search (@@)
-      #
-      # ## Options
-      #
-      # - **name**: Custom index name (auto-generated if not provided)
-      # - **fastupdate**: Use fast update optimization (default: true)
-      #
-      # ## Usage
-      #
-      # ```
-      # add_gin_index("posts", "metadata")
-      # add_gin_index("posts", "tags", name: "idx_posts_tags", fastupdate: false)
-      # ```
-      def add_gin_index(table : String, column : String, name : String? = nil, fastupdate : Bool = true)
-        index = Schema::GinIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_gin", fastupdate)
-        @database.execute(index.to_sql)
-      end
-
-      # Remove a GIN index
-      def remove_gin_index(table : String, column : String? = nil, name : String? = nil)
-        index_name = name || "index_#{table}_on_#{column}_gin"
-        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
-      end
-
-      # Add a GiST index (PostgreSQL only)
-      #
-      # GiST (Generalized Search Tree) is optimized for:
-      # - Geometric data types (point, circle, polygon)
-      # - Range types
-      # - Nearest-neighbor searches
-      #
-      # ## Usage
-      #
-      # ```
-      # add_gist_index("locations", "coordinates")
-      # add_gist_index("ranges", "date_range", name: "idx_date_range_gist")
-      # ```
-      def add_gist_index(table : String, column : String, name : String? = nil)
-        index = Schema::GistIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_gist")
-        @database.execute(index.to_sql)
-      end
-
-      # Add a GiST index on multiple columns
-      def add_gist_index(table : String, columns : Array(String), name : String? = nil)
-        index = Schema::GistIndexDefinition.new(table, columns, name || "index_#{table}_on_#{columns.join("_")}_gist")
-        @database.execute(index.to_sql)
-      end
-
-      # Remove a GiST index
-      def remove_gist_index(table : String, column : String? = nil, name : String? = nil)
-        index_name = name || "index_#{table}_on_#{column}_gist"
-        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
-      end
-
-      # Add a full-text search index (PostgreSQL only)
-      #
-      # Creates a GIN index on a tsvector expression for efficient full-text search.
-      #
-      # ## Options
-      #
-      # - **config**: Text search configuration (default: "english")
-      # - **name**: Custom index name
-      # - **fastupdate**: Use fast update optimization (default: true)
-      #
-      # ## Usage
-      #
-      # ```
-      # add_full_text_index("articles", "title")
-      # add_full_text_index("articles", ["title", "content"], config: "english")
-      # ```
-      def add_full_text_index(table : String, column : String, config : String = "english", name : String? = nil, fastupdate : Bool = true)
-        index = Schema::FullTextIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_fts", config, fastupdate)
-        @database.execute(index.to_sql)
-      end
-
-      # Add a full-text search index on multiple columns
-      def add_full_text_index(table : String, columns : Array(String), config : String = "english", name : String? = nil, fastupdate : Bool = true)
-        index = Schema::FullTextIndexDefinition.new(table, columns, name || "index_#{table}_on_#{columns.join("_")}_fts", config, fastupdate)
-        @database.execute(index.to_sql)
-      end
-
-      # Remove a full-text search index
-      def remove_full_text_index(table : String, column : String? = nil, name : String? = nil)
-        index_name = name || "index_#{table}_on_#{column}_fts"
-        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
-      end
-
-      # Add a partial index (PostgreSQL only)
-      #
-      # Partial indexes only index rows matching the WHERE condition.
-      # Smaller and faster for specific queries.
-      #
-      # ## Options
-      #
-      # - **condition**: SQL WHERE clause (required)
-      # - **name**: Custom index name
-      # - **unique**: Create unique index (default: false)
-      #
-      # ## Usage
-      #
-      # ```
-      # # Only index active users
-      # add_partial_index("users", "email", condition: "active = true")
-      #
-      # # Unique constraint only on published posts
-      # add_partial_index("posts", "slug", condition: "status = 'published'", unique: true)
-      # ```
-      def add_partial_index(table : String, column : String, condition : String, name : String? = nil, unique : Bool = false)
-        index = Schema::PartialIndexDefinition.new(table, column, name || "index_#{table}_on_#{column}_partial", condition, unique)
-        @database.execute(index.to_sql)
-      end
-
-      # Remove a partial index
-      def remove_partial_index(table : String, column : String? = nil, name : String? = nil)
-        index_name = name || "index_#{table}_on_#{column}_partial"
-        @database.execute("DROP INDEX IF EXISTS \"#{index_name}\"")
-      end
-
-      # Add an expression index (PostgreSQL only)
-      #
-      # Expression indexes index the result of an expression rather than a column.
-      # Useful for case-insensitive searches, computed values, etc.
-      #
-      # ## Options
-      #
-      # - **name**: Index name (required)
-      # - **unique**: Create unique index (default: false)
-      # - **using**: Index method (e.g., "btree", "hash", "gin", "gist")
-      #
-      # ## Usage
-      #
-      # ```
-      # # Case-insensitive email lookup
-      # add_expression_index("users", "lower(email)", name: "idx_users_email_lower", unique: true)
-      #
-      # # Index on year extracted from timestamp
-      # add_expression_index("orders", "extract(year from created_at)", name: "idx_orders_year")
-      # ```
-      def add_expression_index(table : String, expression : String, name : String, unique : Bool = false, using : String? = nil)
-        index = Schema::ExpressionIndexDefinition.new(table, expression, name, unique, using)
-        @database.execute(index.to_sql)
-      end
-
-      # Remove an expression index
-      def remove_expression_index(name : String)
-        @database.execute("DROP INDEX IF EXISTS \"#{name}\"")
-      end
-
-      # Execute raw SQL
-      #
-      # Use this for custom SQL that isn't covered by the migration DSL.
-      # Errors will be wrapped with context to help debugging.
-      #
-      # ## Example
-      #
-      # ```
-      # execute "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""
-      # execute "UPDATE users SET role = 'member' WHERE role IS NULL"
-      # ```
-      def execute(sql : String)
-        execute_with_context(sql, "execute (raw SQL)")
+    # Error raised when parsing a migration file fails
+    class MigrationParseError < Ralph::Error
+      def initialize(message : String)
+        super(message)
       end
     end
   end
 end
-
-require "./schema"

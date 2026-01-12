@@ -12,8 +12,9 @@ module Ralph
       @name : String
       @output_dir : String
       @dialect : Symbol
+      @model_schemas : Hash(String, ModelSchema)?
 
-      def initialize(@diff, @name = "auto_migration", @output_dir = "./db/migrations", @dialect = :sqlite)
+      def initialize(@diff, @name = "auto_migration", @output_dir = "./db/migrations", @dialect = :sqlite, @model_schemas = nil)
       end
 
       def generate : NamedTuple(path: String, content: String)
@@ -151,10 +152,29 @@ module Ralph
 
       private def generate_create_table(io : IO, change : SchemaChange)
         io << "    create_table(\"#{change.table}\") do |t|\n"
-        # The columns info is just a comma-separated list of names in details
-        # In a real implementation, we'd have full column info
-        io << "      # TODO: Define columns\n"
-        io << "      # Columns needed: #{change.details["columns"]}\n"
+
+        # If we have model schemas, use them to generate full column definitions
+        if schemas = @model_schemas
+          if model = schemas[change.table]?
+            model.columns.each do |col|
+              io << "      t.column :#{col.name}, :#{col.sql_type}"
+              io << ", primary: true" if col.primary_key
+              io << ", null: false" unless col.nullable
+              if default = col.default
+                io << ", default: #{default.inspect}"
+              end
+              io << "\n"
+            end
+          else
+            io << "      # Model schema not found for #{change.table}\n"
+            io << "      # Columns needed: #{change.details["columns"]}\n"
+          end
+        else
+          # Fallback: just list column names
+          io << "      # TODO: Define columns\n"
+          io << "      # Columns needed: #{change.details["columns"]}\n"
+        end
+
         io << "    end\n"
       end
     end

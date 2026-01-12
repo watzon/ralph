@@ -20,6 +20,11 @@ module Ralph
     # The primary database backend to use
     property database : Database::Backend?
 
+    # Check if a database is configured
+    def database? : Bool
+      !@database.nil?
+    end
+
     # Hash of named database backends
     # Allows connecting to multiple databases
     property databases : Hash(String, Database::Backend) = Hash(String, Database::Backend).new

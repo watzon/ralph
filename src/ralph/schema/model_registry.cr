@@ -9,6 +9,8 @@ module Ralph
     @@registered_models = [] of Ralph::Model.class
 
     # Register a model class
+    # NOTE: This runtime registration has timing issues with macro finished.
+    # Use ModelSchemaExtractor.extract_all which uses compile-time discovery instead.
     def self.register_model(model_class : Ralph::Model.class)
       @@registered_models << model_class unless @@registered_models.includes?(model_class)
     end

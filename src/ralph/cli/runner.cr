@@ -77,13 +77,11 @@ module Ralph
 
             require "ralph"
             require "ralph/backends/sqlite"  # and/or postgres
-            require "./db/migrations/*"
-            require "./src/models/*"
 
             Ralph::Cli::Runner.new.run
 
           Then run with: crystal run ./ralph.cr -- [command]
-          Or make it executable: chmod +x ralph.cr && ./ralph.cr [command]
+          Or compile once: crystal build ./ralph.cr -o ralph && ./ralph [command]
 
         Commands:
           db              Database commands
@@ -96,6 +94,7 @@ module Ralph
           db:drop                      Drop the database
           db:migrate                   Run pending migrations
           db:rollback                  Roll back the last migration
+          db:rollback:all              Roll back all migrations
           db:status                    Show migration status
           db:version                   Show current migration version
           db:seed                      Load the seed file
@@ -106,7 +105,7 @@ module Ralph
           db:generate                  Generate migration from model diff
 
         Generator commands:
-          g:migration NAME             Create a new migration
+          g:migration NAME             Create a new SQL migration file
           g:model NAME                 Generate a model with migration
 
         Options:
@@ -127,17 +126,24 @@ module Ralph
           postgres://user:pass@host:port/dbname
           postgres://user@host/dbname?host=/var/run/postgresql
 
+        Migration File Format:
+          Migrations are plain SQL files with special comment markers:
+
+            -- +migrate Up
+            CREATE TABLE users (...);
+
+            -- +migrate Down
+            DROP TABLE IF EXISTS users;
+
         Examples:
-          ./ralph.cr db:migrate
-          ./ralph.cr db:seed
-          ./ralph.cr g:model User name:string email:string
-          ./ralph.cr db:pull                           # Pull all tables
-          ./ralph.cr db:pull --tables=users,posts      # Pull specific tables
-          ./ralph.cr db:pull --dry-run                 # Preview without generating
-          ./ralph.cr db:generate                       # Generate migration
-          ./ralph.cr db:generate --name add_users      # Named migration
-          ./ralph.cr db:generate --dry-run             # Preview changes
-          crystal run ./ralph.cr -- db:migrate -d postgres://localhost/myapp
+          ./ralph db:migrate
+          ./ralph db:seed
+          ./ralph g:migration create_users
+          ./ralph g:model User name:string email:string
+          ./ralph db:pull                           # Pull all tables
+          ./ralph db:pull --tables=users,posts      # Pull specific tables
+          ./ralph db:rollback                       # Rollback last migration
+          ./ralph db:rollback --steps=3             # Rollback 3 migrations
         HELP
       end
 
@@ -170,7 +176,9 @@ module Ralph
         when "migrate"
           migrate(db)
         when "rollback"
-          rollback(db)
+          rollback(db, args[1..])
+        when "rollback:all"
+          rollback_all(db)
         when "status"
           status(db)
         when "version"
@@ -186,7 +194,7 @@ module Ralph
         when "pull"
           pull_schema(db, args[1..])
         when "generate"
-          generate_migration(db, args[1..])
+          generate_migration_from_diff(db, args[1..])
         else
           @output.puts "Unknown db command: #{subcommand}"
           exit 1
@@ -416,19 +424,33 @@ module Ralph
       end
 
       private def migrate(db)
-        migrator = Migrations::Migrator.new(db, @migrations_dir)
-        migrator.migrate(:up)
-        @output.puts "Migration complete"
+        migrator = Migrations::Migrator.new(db, @migrations_dir, @output)
+        migrator.migrate
       end
 
-      private def rollback(db)
-        migrator = Migrations::Migrator.new(db, @migrations_dir)
-        migrator.rollback
-        @output.puts "Rollback complete"
+      private def rollback(db, args : Array(String))
+        steps = 1
+
+        # Parse --steps option
+        args.each_with_index do |arg, i|
+          if arg == "--steps" && i + 1 < args.size
+            steps = args[i + 1].to_i
+          elsif arg.starts_with?("--steps=")
+            steps = arg.split("=", 2).last.to_i
+          end
+        end
+
+        migrator = Migrations::Migrator.new(db, @migrations_dir, @output)
+        migrator.rollback(steps)
+      end
+
+      private def rollback_all(db)
+        migrator = Migrations::Migrator.new(db, @migrations_dir, @output)
+        migrator.rollback_all
       end
 
       private def status(db)
-        migrator = Migrations::Migrator.new(db, @migrations_dir)
+        migrator = Migrations::Migrator.new(db, @migrations_dir, @output)
         status = migrator.status
 
         @output.puts "Migration status:"
@@ -442,7 +464,7 @@ module Ralph
       end
 
       private def version(db)
-        migrator = Migrations::Migrator.new(db, @migrations_dir)
+        migrator = Migrations::Migrator.new(db, @migrations_dir, @output)
         if v = migrator.current_version
           @output.puts "Current version: #{v}"
         else
@@ -510,7 +532,8 @@ module Ralph
       end
 
       private def create_migration(name : String)
-        Migrations::Migrator.create(name, @migrations_dir)
+        filepath = Migrations::Migrator.create(name, @migrations_dir)
+        @output.puts "Created migration: #{filepath}"
       end
 
       # Seed the database with data from db/seeds.cr
@@ -645,7 +668,7 @@ module Ralph
       end
 
       # Generate migration from model diff (db:generate command)
-      private def generate_migration(db, args : Array(String))
+      private def generate_migration_from_diff(db, args : Array(String))
         name = "auto_migration"
         dry_run = false
 
@@ -733,8 +756,8 @@ module Ralph
           return
         end
 
-        # Generate migration
-        generator = Ralph::Schema::MigrationGenerator.new(
+        # Generate SQL migration
+        generator = Ralph::Schema::SqlMigrationGenerator.new(
           diff: diff,
           name: name,
           output_dir: @migrations_dir,

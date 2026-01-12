@@ -22,22 +22,41 @@ module Ralph
         "UUID"      => :uuid,
       }
 
+      # Get the set of polymorphic FK column names for a model
+      def self.polymorphic_fk_columns(model_class : Ralph::Model.class) : Set(String)
+        columns = Set(String).new
+        class_name = model_class.name.split("::").last
+        associations = Ralph::Associations.associations[class_name]?
+        return columns unless associations
+
+        associations.each do |name, meta|
+          next unless meta.type == :belongs_to && meta.polymorphic
+          columns << meta.foreign_key
+        end
+
+        columns
+      end
+
       def self.extract(model_class : Ralph::Model.class) : ModelSchema
         table_name = model_class.table_name
         columns = extract_columns(model_class)
         foreign_keys = extract_foreign_keys(model_class)
         indexes = [] of DatabaseIndex # TODO: Extract indexes from model if defined
+        poly_fk_cols = polymorphic_fk_columns(model_class)
 
-        ModelSchema.new(table_name, columns, foreign_keys, indexes)
+        ModelSchema.new(table_name, columns, foreign_keys, indexes, poly_fk_cols)
       end
 
       def self.extract_all : Hash(String, ModelSchema)
         result = {} of String => ModelSchema
 
-        Ralph::Schema.registered_models.each do |model_class|
-          schema = extract(model_class)
-          result[schema.table_name] = schema
-        end
+        # Use compile-time macro to find all Model subclasses
+        # This avoids relying on runtime registration which has timing issues
+        {% for model_class in Ralph::Model.all_subclasses %}
+          {% unless model_class.abstract? %}
+            result[{{ model_class }}.table_name] = extract({{ model_class }})
+          {% end %}
+        {% end %}
 
         result
       end
@@ -79,11 +98,15 @@ module Ralph
           next unless meta.type == :belongs_to
           next if meta.polymorphic
 
+          # Get the actual table name from the associated model class
+          # This is more accurate than the metadata which may be derived from class name
+          target_table = resolve_table_name(meta.class_name)
+
           # belongs_to implies a foreign key column
           # on_delete and on_update are optional and default to nil
           fks << ModelForeignKey.new(
             from_column: meta.foreign_key,
-            to_table: meta.table_name,
+            to_table: target_table,
             to_column: meta.primary_key,
             on_delete: nil, # TODO: Extract from association metadata if available
             on_update: nil  # TODO: Extract from association metadata if available
@@ -91,6 +114,24 @@ module Ralph
         end
 
         fks
+      end
+
+      # Resolve the actual table name for a model class by name
+      # Uses compile-time macro to check all known model subclasses
+      private def self.resolve_table_name(class_name : String) : String
+        # Try to find the model class and get its actual table name
+        {% for model_class in Ralph::Model.all_subclasses %}
+          {% unless model_class.abstract? %}
+            if class_name == {{ model_class.name.stringify }} || class_name == {{ model_class.name.split("::").last.stringify }}
+              return {{ model_class }}.table_name
+            end
+          {% end %}
+        {% end %}
+
+        # Fallback: pluralize the underscored class name (Rails convention)
+        # Handle namespaced class names like "Admin::User" -> "user"
+        base_name = class_name.split("::").last
+        base_name.underscore + "s"
       end
     end
   end

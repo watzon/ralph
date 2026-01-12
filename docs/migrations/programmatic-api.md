@@ -14,7 +14,6 @@ The `Ralph::Migrations::Migrator` class provides the programmatic interface:
 ```crystal
 require "ralph"
 require "ralph/backends/sqlite"
-require "./db/migrations/*"  # Load all migration files
 
 # Configure database
 Ralph.configure do |config|
@@ -25,13 +24,16 @@ end
 migrator = Ralph::Migrations::Migrator.new(Ralph.database)
 
 # Run all pending migrations
-migrator.migrate(:up)
+migrator.migrate
 
-# Or roll back all migrations
-migrator.migrate(:down)
-
-# Roll back only the last migration
+# Or roll back the last migration
 migrator.rollback
+
+# Roll back multiple migrations
+migrator.rollback(3)
+
+# Roll back all migrations
+migrator.rollback_all
 ```
 
 ## Querying Migration Status
@@ -59,6 +61,11 @@ migrator.status.each do |version, applied|
   status = applied ? "UP" : "DOWN"
   puts "#{status}: #{version}"
 end
+
+# Get pending migrations (not yet applied)
+migrator.pending_migrations.each do |migration|
+  puts "Pending: #{migration.version}_#{migration.name}"
+end
 ```
 
 ## Auto-Running Migrations on Application Start
@@ -69,8 +76,6 @@ For development or simple deployments, you can automatically run pending migrati
 ```crystal
 require "ralph"
 require "ralph/backends/sqlite"
-require "./db/migrations/*"
-require "./src/models/*"
 
 # Configure database
 Ralph.configure do |config|
@@ -81,11 +86,11 @@ end
 def run_pending_migrations
   migrator = Ralph::Migrations::Migrator.new(Ralph.database)
 
-  pending = migrator.status.select { |_, applied| !applied }
+  pending = migrator.pending_migrations
 
   if pending.any?
     puts "Running #{pending.size} pending migration(s)..."
-    migrator.migrate(:up)
+    migrator.migrate
     puts "Migrations complete!"
   end
 end
@@ -124,10 +129,10 @@ def run_migrations_with_lock
   return unless lock_acquired
   
   begin
-    pending = migrator.status.select { |_, applied| !applied }
+    pending = migrator.pending_migrations
     if pending.any?
       puts "Acquired migration lock, running #{pending.size} migration(s)..."
-      migrator.migrate(:up)
+      migrator.migrate
     end
   ensure
     Ralph.database.execute("SELECT pg_advisory_unlock(12345)")
@@ -151,7 +156,7 @@ def run_migrations_with_lock
       lock_file.puts Process.pid
       
       migrator = Ralph::Migrations::Migrator.new(Ralph.database)
-      migrator.migrate(:up)
+      migrator.migrate
     end
   rescue File::AlreadyExistsError
     puts "Another process is running migrations, skipping..."
@@ -170,8 +175,6 @@ Auto-migrations are particularly useful in test suites:
 # spec/spec_helper.cr
 require "ralph"
 require "ralph/backends/sqlite"
-require "../db/migrations/*"
-require "../src/models/*"
 
 # Use in-memory SQLite for fast tests
 Ralph.configure do |config|
@@ -180,7 +183,7 @@ end
 
 # Run migrations before tests
 migrator = Ralph::Migrations::Migrator.new(Ralph.database)
-migrator.migrate(:up)
+migrator.migrate
 
 Spec.before_each do
   # Truncate tables between tests
@@ -195,34 +198,30 @@ You can also create migration files from code:
 
 ```crystal
 # Create a new migration file
-Ralph::Migrations::Migrator.create("AddStatusToOrders", "./db/migrations")
-# Output: Created migration: ./db/migrations/20240108123456_add_status_to_orders.cr
+path = Ralph::Migrations::Migrator.create("add_status_to_orders", "./db/migrations")
+puts "Created migration: #{path}"
+# Output: Created migration: ./db/migrations/20240108123456_add_status_to_orders.sql
 ```
 
-This generates a skeleton migration file that you can then edit.
+This generates a skeleton SQL migration file that you can then edit.
 
-## Registering Migrations
+## Accessing Migration Details
 
-Migrations must be registered with the migrator to be discovered:
+The `Migration` class provides access to parsed migration information:
 
 ```crystal
-class CreateUsersTable_20240101120000 < Ralph::Migrations::Migration
-  migration_version 20240101120000
-  
-  def up : Nil
-    # ...
-  end
-  
-  def down : Nil
-    # ...
-  end
+migrator = Ralph::Migrations::Migrator.new(Ralph.database)
+
+migrator.all_migrations.each do |migration|
+  puts "Migration: #{migration.version}_#{migration.name}"
+  puts "  File: #{migration.filepath}"
+  puts "  Has Up: #{migration.has_up?}"
+  puts "  Has Down: #{migration.has_down?}"
+  puts "  No Transaction: #{migration.no_transaction?}"
+  puts "  Up Statements: #{migration.up_statements.size}"
+  puts "  Down Statements: #{migration.down_statements.size}"
 end
-
-# Register at the bottom of each migration file
-Ralph::Migrations::Migrator.register(CreateUsersTable_20240101120000)
 ```
-
-The CLI generator adds this registration automatically. If you create migrations manually, don't forget to register them.
 
 ## Full Example: Web Application Startup
 
@@ -233,8 +232,6 @@ Here's a complete example for a Kemal web application:
 require "kemal"
 require "ralph"
 require "ralph/backends/sqlite"
-require "./db/migrations/*"
-require "./src/models/*"
 
 module MyApp
   # Configure database
@@ -248,11 +245,11 @@ module MyApp
     return if ENV["SKIP_MIGRATIONS"]? == "true"
 
     migrator = Ralph::Migrations::Migrator.new(Ralph.database)
-    pending = migrator.status.count { |_, applied| !applied }
+    pending = migrator.pending_migrations
 
-    if pending > 0
-      puts "Running #{pending} pending migration(s)..."
-      migrator.migrate(:up)
+    if pending.any?
+      puts "Running #{pending.size} pending migration(s)..."
+      migrator.migrate
       puts "Database ready!"
     end
   end
@@ -268,8 +265,24 @@ end
 Kemal.run
 ```
 
+## Suppressing Output
+
+By default, the migrator prints status messages to STDOUT. You can redirect or suppress output:
+
+```crystal
+# Send output to a log file
+log_io = File.open("migrations.log", "w")
+migrator = Ralph::Migrations::Migrator.new(Ralph.database, output: log_io)
+migrator.migrate
+log_io.close
+
+# Suppress output entirely
+migrator = Ralph::Migrations::Migrator.new(Ralph.database, output: IO::Memory.new)
+migrator.migrate
+```
+
 ## See Also
 
 - [Introduction](introduction.md) - Migration basics and CLI commands
-- [Schema Builder](schema-builder.md) - Full DSL reference for table operations
+- [Schema Reference](schema-builder.md) - Schema DSL for documentation
 - [Error Handling](error-handling.md) - Handling migration failures

@@ -31,6 +31,14 @@ module Ralph::Athena
     # The database URL to use. If not set, reads from DATABASE_URL environment variable.
     property database_url : String?
 
+    # Path to the migrations directory.
+    # Default: "./db/migrations"
+    property migrations_dir : String = "./db/migrations"
+
+    # Path to the models directory.
+    # Default: "./src/models"
+    property models_dir : String = "./src/models"
+
     def initialize
     end
   end
@@ -50,6 +58,9 @@ module Ralph::Athena
   #
   # - `database_url`: Optional database URL. If not provided, reads from DATABASE_URL env var.
   # - `auto_migrate`: Whether to run pending migrations on startup. Default: false.
+  # - `lazy_connect`: If true, defer database connection until first use. Default: false.
+  #   This is useful for CLI tools where commands like `db:create` need to run before
+  #   the database exists.
   #
   # ## Example
   #
@@ -68,6 +79,9 @@ module Ralph::Athena
   #   config.max_pool_size = 50
   #   config.query_cache_ttl = 10.minutes
   # end
+  #
+  # # For CLI tools - defer connection until needed
+  # Ralph::Athena.configure(lazy_connect: true)
   # ```
   #
   # ## Backend Detection
@@ -88,23 +102,33 @@ module Ralph::Athena
     database_url : String? = nil,
     auto_migrate : Bool = false,
     log_migrations : Bool = true,
+    migrations_dir : String = "./db/migrations",
+    models_dir : String = "./src/models",
+    lazy_connect : Bool = false,
     &
   ) : Nil
     # Store Athena-specific config
-    @@config.database_url = database_url
+    @@config.database_url = database_url || ENV["DATABASE_URL"]?
     @@config.auto_migrate = auto_migrate
     @@config.log_migrations = log_migrations
+    @@config.migrations_dir = migrations_dir
+    @@config.models_dir = models_dir
 
-    # Configure Ralph
-    Ralph.configure do |ralph_config|
-      # Set database backend
-      url = database_url || ENV["DATABASE_URL"]?
-      raise ConfigurationError.new("DATABASE_URL environment variable not set and no database_url provided") unless url
+    url = @@config.database_url
+    raise ConfigurationError.new("DATABASE_URL environment variable not set and no database_url provided") unless url
 
-      ralph_config.database = backend_from_url(url)
-
-      # Allow user to customize Ralph settings
-      yield ralph_config
+    if lazy_connect
+      # Store config but don't connect yet - connection will happen on first use
+      # via ensure_connected or when Ralph.database is called
+      Ralph.configure do |ralph_config|
+        yield ralph_config
+      end
+    else
+      # Connect immediately (original behavior)
+      Ralph.configure do |ralph_config|
+        ralph_config.database = backend_from_url(url)
+        yield ralph_config
+      end
     end
 
     # Run migrations if requested (not using listener, just on configure)
@@ -117,8 +141,37 @@ module Ralph::Athena
     database_url : String? = nil,
     auto_migrate : Bool = false,
     log_migrations : Bool = true,
+    migrations_dir : String = "./db/migrations",
+    models_dir : String = "./src/models",
+    lazy_connect : Bool = false,
   ) : Nil
-    configure(database_url: database_url, auto_migrate: auto_migrate, log_migrations: log_migrations) { }
+    configure(database_url: database_url, auto_migrate: auto_migrate, log_migrations: log_migrations, migrations_dir: migrations_dir, models_dir: models_dir, lazy_connect: lazy_connect) { }
+  end
+
+  # Ensure the database is connected.
+  #
+  # Call this when you need the database and lazy_connect was used.
+  # If already connected, this is a no-op.
+  # If not connected, this will create the connection using the stored URL.
+  #
+  # ## Raises
+  #
+  # - `ConfigurationError` if no database URL was configured
+  # - Database connection errors if the database is not available
+  def self.ensure_connected : Nil
+    return if Ralph.settings.database?
+
+    url = @@config.database_url
+    raise ConfigurationError.new("No database URL configured. Call Ralph::Athena.configure first.") unless url
+
+    Ralph.configure do |ralph_config|
+      ralph_config.database = backend_from_url(url)
+    end
+  end
+
+  # Check if the database is connected.
+  def self.connected? : Bool
+    Ralph.settings.database? != nil
   end
 
   # Run any pending migrations.
@@ -140,7 +193,7 @@ module Ralph::Athena
         puts "[Ralph::Athena] Running #{pending.size} pending migration(s)..."
       end
 
-      migrator.migrate(:up)
+      migrator.migrate
 
       if @@config.log_migrations
         puts "[Ralph::Athena] Migrations complete!"
