@@ -103,6 +103,7 @@ module Ralph
           db:pool                      Show connection pool status
           db:pull                      Generate models from database schema
           db:generate                  Generate migration from model diff
+          db:check                     Validate model schemas against database
 
         Generator commands:
           g:migration NAME             Create a new SQL migration file
@@ -195,6 +196,8 @@ module Ralph
           pull_schema(db, args[1..])
         when "generate"
           generate_migration_from_diff(db, args[1..])
+        when "check"
+          check_schema(db)
         else
           @output.puts "Unknown db command: #{subcommand}"
           exit 1
@@ -787,6 +790,71 @@ module Ralph
           match[1]
         else
           raise "Could not extract database name from URL: #{url}"
+        end
+      end
+
+      # Check schema (db:check command)
+      #
+      # Validates model definitions against the actual database schema,
+      # reporting any mismatches that could cause runtime errors.
+      private def check_schema(db)
+        @output.puts "Validating model schemas against database..."
+        @output.puts ""
+
+        results = Ralph::Schema::Validator.validate_all
+
+        if results.empty?
+          @output.puts "No models found to validate."
+          @output.puts "Make sure your models inherit from Ralph::Model and are loaded."
+          exit 1
+        end
+
+        valid_count = 0
+        warning_count = 0
+        invalid_count = 0
+
+        results.each do |table_name, result|
+          if result.valid?
+            valid_count += 1
+            if result.warnings.empty?
+              @output.puts "✓ #{result.model_name}"
+            else
+              warning_count += result.warnings.size
+              @output.puts "✓ #{result.model_name} (#{result.warnings.size} warnings)"
+              result.warnings.each do |warning|
+                @output.puts "    ⚠ #{warning}"
+              end
+            end
+          else
+            invalid_count += 1
+            @output.puts "✗ #{result.model_name}"
+            result.errors.each do |error|
+              @output.puts "    ✗ #{error}"
+            end
+            result.warnings.each do |warning|
+              @output.puts "    ⚠ #{warning}"
+            end
+          end
+        end
+
+        @output.puts ""
+        @output.puts "=" * 50
+        @output.puts "Results: #{results.size} models checked"
+        @output.puts "  ✓ Valid:    #{valid_count}"
+        @output.puts "  ✗ Invalid:  #{invalid_count}"
+        @output.puts "  ⚠ Warnings: #{warning_count}"
+
+        if invalid_count > 0
+          @output.puts ""
+          @output.puts "Schema validation FAILED"
+          @output.puts ""
+          @output.puts "To fix these issues:"
+          @output.puts "  1. Run 'ralph db:pull' to regenerate models from database schema"
+          @output.puts "  2. Or manually update your model column definitions to match"
+          exit 1
+        else
+          @output.puts ""
+          @output.puts "Schema validation PASSED"
         end
       end
     end

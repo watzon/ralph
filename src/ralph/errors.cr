@@ -282,21 +282,228 @@ module Ralph
     end
   end
 
-  # Raised when model columns don't match database schema
+  # Raised when model columns don't match the ResultSet columns during hydration
   #
-  # This error indicates that the model definition has columns that don't exist
-  # in the database, or the database has columns not defined in the model.
-  # This commonly causes cryptic "column type mismatch" errors at runtime.
+  # This error catches mismatches between what a model expects and what the
+  # database actually returns. Common causes:
+  # - Model is missing columns that exist in the database
+  # - Model has extra columns not in the database
+  # - Column order mismatch (when using SELECT * or wrong column order)
+  # - Schema drift after database migrations
   #
   # ## Example
   #
   # ```
-  # # Call at startup to catch mismatches early:
-  # Supply.validate_schema!
-  # # => Ralph::SchemaMismatchError: Schema mismatch for Supply (table: supplies):
-  # #      Model has columns not in database: catalog_supply_id
-  # #      This will cause column type mismatch errors when reading records.
+  # # When loading a Supply record with mismatched schema:
+  # Supply.find(id)
+  # # => Ralph::SchemaMismatchError: ResultSet mismatch for Supply (table: supplies)
+  # #
+  # #    Expected 16 columns, got 18 from database
+  # #
+  # #    Missing in model (add these columns):
+  # #      - catalog_supply_id
+  # #      - tenant_catalog_supply_id
+  # #
+  # #    First mismatch at index 0:
+  # #      Expected: id
+  # #      Got: created_at
+  # #
+  # #    Hint: Run `ralph db:pull` to regenerate your model from the database schema,
+  # #    or manually add the missing columns to your model definition.
   # ```
   class SchemaMismatchError < Error
+    getter model_name : String
+    getter table_name : String
+    getter expected_columns : Array(String)
+    getter actual_columns : Array(String)
+
+    def initialize(
+      @model_name : String,
+      @table_name : String,
+      @expected_columns : Array(String),
+      @actual_columns : Array(String),
+    )
+      super(build_message)
+    end
+
+    private def build_message : String
+      String.build do |str|
+        str << "ResultSet mismatch for " << @model_name << " (table: " << @table_name << ")\n\n"
+
+        # Count mismatch
+        if @expected_columns.size != @actual_columns.size
+          str << "Expected " << @expected_columns.size << " columns, got " << @actual_columns.size << " from database\n\n"
+        end
+
+        # Find missing columns (in DB but not in model)
+        missing_in_model = @actual_columns - @expected_columns
+        if missing_in_model.any?
+          str << "Missing in model (add these columns):\n"
+          missing_in_model.each do |col|
+            str << "  - " << col << "\n"
+          end
+          str << "\n"
+        end
+
+        # Find extra columns (in model but not in DB)
+        extra_in_model = @expected_columns - @actual_columns
+        if extra_in_model.any?
+          str << "Extra in model (remove these columns or add to database):\n"
+          extra_in_model.each do |col|
+            str << "  - " << col << "\n"
+          end
+          str << "\n"
+        end
+
+        # Find first positional mismatch
+        first_mismatch_idx = find_first_mismatch
+        if first_mismatch_idx && first_mismatch_idx < @expected_columns.size && first_mismatch_idx < @actual_columns.size
+          str << "First mismatch at index " << first_mismatch_idx << ":\n"
+          str << "  Expected: " << @expected_columns[first_mismatch_idx] << "\n"
+          str << "  Got: " << @actual_columns[first_mismatch_idx] << "\n\n"
+        end
+
+        # Helpful hints
+        str << "To fix this:\n"
+        str << "  1. Manually update your model's column definitions to match the database\n"
+        str << "  2. Or run `ralph db:pull --overwrite` to regenerate (WARNING: loses custom code)"
+      end
+    end
+
+    private def find_first_mismatch : Int32?
+      max_len = Math.min(@expected_columns.size, @actual_columns.size)
+      max_len.times do |i|
+        return i if @expected_columns[i] != @actual_columns[i]
+      end
+      # If lengths differ but all common elements match, mismatch is at the shorter length
+      return max_len if @expected_columns.size != @actual_columns.size
+      nil
+    end
+
+    # Get a summary suitable for logging
+    def summary : String
+      missing = (@actual_columns - @expected_columns).size
+      extra = (@expected_columns - @actual_columns).size
+      "#{@model_name}: expected #{@expected_columns.size} columns, got #{@actual_columns.size} (#{missing} missing, #{extra} extra)"
+    end
+  end
+
+  # Raised when a column type from the database doesn't match the model's expected type
+  #
+  # This wraps `DB::ColumnTypeMismatchError` with additional context about which
+  # model column was being read and helpful hints for fixing the type mismatch.
+  #
+  # ## Example
+  #
+  # ```
+  # Supply.find(id)
+  # # => Ralph::TypeMismatchError: Type mismatch reading Supply#stock_quantity
+  # #
+  # #    Column: stock_quantity (index 6)
+  # #    Expected type: Float64 | PG::Numeric | Nil
+  # #    Actual type: Float32
+  # #
+  # #    Hint: PostgreSQL 'real' type maps to Float32 in Crystal.
+  # #    Change your model column from `Float64` to `Float32`:
+  # #
+  # #      column stock_quantity : Float32
+  # #
+  # #    Or change your database column to 'double precision' or 'numeric'.
+  # ```
+  class TypeMismatchError < Error
+    getter model_name : String
+    getter column_name : String
+    getter column_index : Int32
+    getter expected_type : String
+    getter actual_type : String
+    getter resultset_column_name : String?
+
+    # Common PostgreSQL type to Crystal type mappings for hints
+    TYPE_HINTS = {
+      "Float32" => {
+        "db_types"    => ["real", "float4"],
+        "crystal"     => "Float32",
+        "alternative" => "double precision or numeric",
+      },
+      "Float64" => {
+        "db_types"    => ["double precision", "float8"],
+        "crystal"     => "Float64",
+        "alternative" => "real (but loses precision)",
+      },
+      "PG::Numeric" => {
+        "db_types"    => ["numeric", "decimal"],
+        "crystal"     => "Float64 (or PG::Numeric for exact precision)",
+        "alternative" => "double precision (but loses exact precision)",
+      },
+      "Int32" => {
+        "db_types"    => ["integer", "int4", "serial"],
+        "crystal"     => "Int32",
+        "alternative" => "bigint for larger values",
+      },
+      "Int64" => {
+        "db_types"    => ["bigint", "int8", "bigserial"],
+        "crystal"     => "Int64",
+        "alternative" => "integer if values fit in 32 bits",
+      },
+    }
+
+    def initialize(
+      @model_name : String,
+      @column_name : String,
+      @column_index : Int32,
+      @expected_type : String,
+      @actual_type : String,
+      @resultset_column_name : String? = nil,
+      cause : Exception? = nil,
+    )
+      super(build_message, cause)
+    end
+
+    private def build_message : String
+      String.build do |str|
+        str << "Type mismatch reading " << @model_name << "#" << @column_name << "\n\n"
+
+        str << "Column: " << @column_name
+        if rs_col = @resultset_column_name
+          str << " (ResultSet column: '" << rs_col << "'"
+        end
+        str << ", index " << @column_index << ")\n"
+
+        str << "Expected type: " << @expected_type << "\n"
+        str << "Actual type: " << @actual_type << "\n\n"
+
+        # Check if ResultSet column name differs from model column name
+        if (rs_col = @resultset_column_name) && rs_col != @column_name
+          str << "WARNING: Column name mismatch!\n"
+          str << "  Model expects column '" << @column_name << "' at index " << @column_index << "\n"
+          str << "  But ResultSet has column '" << rs_col << "' at that position\n"
+          str << "  This suggests a column order mismatch - check your model's column order.\n\n"
+        end
+
+        # Add type-specific hints
+        if hint = type_hint
+          str << hint
+        else
+          str << "Hint: Update your model's column type to match the database:\n\n"
+          str << "  column " << @column_name << " : " << suggested_crystal_type << "\n"
+        end
+      end
+    end
+
+    private def type_hint : String?
+      if info = TYPE_HINTS[@actual_type]?
+        String.build do |str|
+          str << "Hint: PostgreSQL types " << info["db_types"].as(Array).join(", ") << " map to " << @actual_type << " in Crystal.\n"
+          str << "Change your model column to use " << info["crystal"] << ":\n\n"
+          str << "  column " << @column_name << " : " << info["crystal"] << "\n\n"
+          str << "Or change your database column to " << info["alternative"].as(String) << "."
+        end
+      end
+    end
+
+    private def suggested_crystal_type : String
+      # Remove union types and Nil for suggestion
+      @actual_type.gsub(" | Nil", "").gsub("Nil | ", "")
+    end
   end
 end

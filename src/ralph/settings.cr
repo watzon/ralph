@@ -153,6 +153,44 @@ module Ralph
     # Default: true
     property query_cache_auto_invalidate : Bool = true
 
+    # Schema Validation Configuration
+    # ================================
+    #
+    # These settings control how Ralph validates model schemas against database
+    # schemas at runtime, helping catch mismatches before they cause cryptic errors.
+
+    # Whether to validate ResultSet columns match model columns during hydration.
+    #
+    # When enabled, Ralph will check that the columns returned by a query match
+    # the columns expected by the model (same names, same count, same order).
+    # This catches schema drift early with a clear error message.
+    #
+    # Performance impact: Minimal - one array comparison per query execution.
+    #
+    # **Recommendation**: Enable in development/test, consider disabling in
+    # production if the small overhead is unacceptable (though it's very small).
+    #
+    # Default: true
+    property strict_resultset_validation : Bool = true
+
+    # Whether to validate schema on first model access (boot-time validation).
+    #
+    # When enabled, the first time a model class is accessed, Ralph will
+    # query the database to validate that the model's column definitions
+    # match the actual database schema.
+    #
+    # This is more thorough than ResultSet validation as it catches:
+    # - Type mismatches (e.g., Float64 in model vs real in DB)
+    # - Nullability mismatches
+    # - Missing columns before any queries are run
+    #
+    # Performance impact: One extra query per model class on first access.
+    #
+    # **Recommendation**: Enable in development, disable in production.
+    #
+    # Default: false (opt-in)
+    property validate_schema_on_boot : Bool = false
+
     def initialize
     end
 

@@ -615,6 +615,25 @@ module Ralph
       {% end %}
     end
 
+    # Get fully-qualified, aliased column expressions for SELECT queries.
+    #
+    # Returns columns in the format: `"table_name"."column_name" AS "column_name"`
+    #
+    # This is the safest way to select columns for model hydration because:
+    # - Explicit table qualification prevents ambiguity in JOINs
+    # - Explicit aliasing ensures column names in ResultSet match model expectations
+    # - Column order matches `column_names_ordered` for `from_result_set`
+    #
+    # ## Example
+    #
+    # ```
+    # User.select_list_sql
+    # # => ["\"users\".\"id\" AS \"id\"", "\"users\".\"name\" AS \"name\"", ...]
+    # ```
+    def self.select_list_sql : Array(String)
+      column_names_ordered.map { |col| %("#{table_name}"."#{col}" AS "#{col}") }
+    end
+
     # Create a base query builder with columns selected in the correct order
     # for from_result_set to read them properly. This ensures column order
     # matches instance variable order regardless of database schema order.
@@ -1514,6 +1533,27 @@ module Ralph
 
     # Helper method to reload from a result set
     private def _reload_from_result_set(rs : DB::ResultSet)
+      # Strict ResultSet validation (when enabled)
+      if Ralph.settings.strict_resultset_validation
+        actual_columns = [] of String
+        rs.column_count.times do |i|
+          actual_columns << rs.column_name(i)
+        end
+        expected_columns = self.class.column_names_ordered
+
+        if actual_columns != expected_columns
+          raise Ralph::SchemaMismatchError.new(
+            model_name: {{@type.name.stringify}},
+            table_name: self.class.table_name,
+            expected_columns: expected_columns,
+            actual_columns: actual_columns
+          )
+        end
+      end
+
+      # Track column index for error reporting
+      column_index = 0
+
       # Read values and assign to instance variables via setters
       {% for ivar in @type.instance_vars %}
         {% unless ivar.name.starts_with?("_") %}
@@ -1526,6 +1566,8 @@ module Ralph
                        type_str.includes?("Nil,") ||
                        type_str.includes?("::Nil") ||
                        type_str == "Nil" %}
+
+          begin
           {% if type_str.includes?("Int64") %}
             {% if nilable %}
               self.{{ivar.name}}=rs.read(Int64 | Nil)
@@ -1599,6 +1641,26 @@ module Ralph
           {% else %}
             self.{{ivar.name}}=rs.read(String | Nil)
           {% end %}
+
+          rescue ex : DB::ColumnTypeMismatchError
+            rs_column_name = if column_index < rs.column_count
+              rs.column_name(column_index)
+            else
+              nil
+            end
+
+            raise Ralph::TypeMismatchError.new(
+              model_name: {{@type.name.stringify}},
+              column_name: {{ivar.name.stringify}},
+              column_index: column_index,
+              expected_type: {{type_str}},
+              actual_type: ex.message.try { |m| m.match(/returned a (\w+)/).try(&.[1]) } || "unknown",
+              resultset_column_name: rs_column_name,
+              cause: ex
+            )
+          end
+
+          column_index += 1
         {% end %}
       {% end %}
 
@@ -1778,8 +1840,55 @@ module Ralph
     end
 
     # Create a model instance from a result set
+    #
+    # This macro generates code to read columns from a DB::ResultSet and
+    # populate a model instance. It includes optional strict validation
+    # that checks the ResultSet columns match the model's expected columns.
+    #
+    # ## Schema Validation
+    #
+    # When `Ralph.settings.strict_resultset_validation` is enabled (default: true),
+    # the generated code will:
+    # 1. Compare ResultSet column names against model's `column_names_ordered`
+    # 2. Raise `Ralph::SchemaMismatchError` if there's any mismatch
+    #
+    # This catches issues like:
+    # - Model missing columns that exist in database
+    # - Model has extra columns not in database
+    # - Column order mismatch
+    # - Schema drift after migrations
+    #
+    # ## Type Mismatch Handling
+    #
+    # Each column read is wrapped to catch `DB::ColumnTypeMismatchError` and
+    # re-raise as `Ralph::TypeMismatchError` with additional context:
+    # - Which model/column was being read
+    # - Expected vs actual types
+    # - Helpful hints for fixing the mismatch
     macro from_result_set(rs)
       %instance = allocate
+
+      # Strict ResultSet validation (when enabled)
+      # Compare actual columns from ResultSet to model's expected columns
+      if Ralph.settings.strict_resultset_validation
+        %actual_columns = [] of String
+        {{rs}}.column_count.times do |i|
+          %actual_columns << {{rs}}.column_name(i)
+        end
+        %expected_columns = \{{@type}}.column_names_ordered
+
+        if %actual_columns != %expected_columns
+          raise Ralph::SchemaMismatchError.new(
+            model_name: \{{@type.name.stringify}},
+            table_name: \{{@type}}.table_name,
+            expected_columns: %expected_columns,
+            actual_columns: %actual_columns
+          )
+        end
+      end
+
+      # Track column index for error reporting
+      %column_index = 0
 
       # Read values and assign to instance variables via setters
       {% for ivar in @type.instance_vars %}
@@ -1793,6 +1902,9 @@ module Ralph
                        type_str.includes?("Nil,") ||
                        type_str.includes?("::Nil") ||
                        type_str == "Nil" %}
+
+          # Wrap column read with error handling for better error messages
+          begin
           {% if type_str.includes?("Int64") %}
             {% if nilable %}
               %instance.{{ivar.name}}={{rs}}.read(Int64 | Nil)
@@ -2017,6 +2129,29 @@ module Ralph
               %instance.{{ivar.name}}={{rs}}.read(String | Nil)
             {% end %}
           {% end %}
+
+          # Rescue DB::ColumnTypeMismatchError and wrap with model context
+          rescue ex : DB::ColumnTypeMismatchError
+            # Get the actual column name from ResultSet if available
+            %rs_column_name = if %column_index < {{rs}}.column_count
+              {{rs}}.column_name(%column_index)
+            else
+              nil
+            end
+
+            raise Ralph::TypeMismatchError.new(
+              model_name: \{{@type.name.stringify}},
+              column_name: {{ivar.name.stringify}},
+              column_index: %column_index,
+              expected_type: {{type_str}},
+              actual_type: ex.message.try { |m| m.match(/returned a (\w+)/).try(&.[1]) } || "unknown",
+              resultset_column_name: %rs_column_name,
+              cause: ex
+            )
+          end
+
+          # Increment column index for next column
+          %column_index += 1
         {% end %}
       {% end %}
 
