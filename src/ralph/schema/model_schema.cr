@@ -14,8 +14,8 @@ module Ralph
         "Int16"     => :smallint,
         "String"    => :string,
         "Bool"      => :boolean,
-        "Float64"   => :float,
-        "Float32"   => :float,
+        "Float64"   => :float64, # DOUBLE PRECISION
+        "Float32"   => :float32, # REAL
         "Time"      => :timestamp,
         "JSON::Any" => :jsonb,
         "Bytes"     => :binary,
