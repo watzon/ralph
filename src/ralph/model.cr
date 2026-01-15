@@ -538,7 +538,11 @@ module Ralph
           # Nullable column: return the nilable type directly
           def {{col_name}} : {{col_type}}
             {% if col_default %}
-              @{{col_name}} ||= {{col_default}}
+              # Use explicit nil check to handle false/0 values correctly
+              if @{{col_name}}.nil?
+                @{{col_name}} = {{col_default}}
+              end
+              @{{col_name}}
             {% else %}
               @{{col_name}}
             {% end %}
@@ -547,7 +551,11 @@ module Ralph
           # Non-nullable column: return non-nil type, raise if accessed before set
           def {{col_name}} : {{col_type}}
             {% if col_default %}
-              @{{col_name}} ||= {{col_default}}
+              # Use explicit nil check to handle false/0 values correctly
+              if @{{col_name}}.nil?
+                @{{col_name}} = {{col_default}}
+              end
+              @{{col_name}}.not_nil!
             {% else %}
               if (val = @{{col_name}}).nil?
                 raise NilAssertionError.new("Column '{{col_name}}' is nil but declared as non-nullable {{col_type}}. Ensure the value is set before accessing.")
