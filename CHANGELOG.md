@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.5] - 2026-01-14
+
+### Added
+
+- **Query Builder**: Array support for IN clauses - `where()` method now automatically expands arrays into parameterized IN clauses. Pass arrays of strings or UUIDs directly: `User.query { |q| q.where("id IN ?", [1, 2, 3]) }` generates `WHERE id IN ($1, $2, $3)`.
+- **Athena Plugin**: Auto-connect on first database access when `lazy_connect: true` is configured. The database connection is automatically established on the first call to `Ralph.database`, eliminating the need for manual `ensure_connected` calls in middleware.
+
 ## [1.0.0-beta.4] - 2026-01-12
 
 ### Added
