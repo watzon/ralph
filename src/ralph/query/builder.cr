@@ -4,6 +4,9 @@ module Ralph
     # Includes UUID for convenience - UUIDs are converted to strings when passed to DB
     alias DBValue = Bool | Float32 | Float64 | Int32 | Int64 | Slice(UInt8) | String | Time | UUID | Nil
 
+    # Type alias for values that can be passed to where() - includes arrays for IN clauses
+    alias WhereValue = DBValue | Array(String) | Array(UUID)
+
     # Convert DBValue array to DB::Any array (converts UUIDs to strings)
     def self.to_db_args(args : Array(DBValue)) : Array(DB::Any)
       args.map do |arg|
@@ -444,17 +447,33 @@ module Ralph
       end
 
       # Add a WHERE clause (returns new Builder)
+      # Supports arrays for IN clauses - when an array is passed, the corresponding `?`
+      # placeholder is expanded to `(?, ?, ...)` with one placeholder per array element.
       def where(clause : String, *args) : Builder
-        # Convert UUID to string since DB layer doesn't support UUID directly
-        converted = args.to_a.map do |a|
+        # Track expanded clause and flattened args
+        expanded_clause = clause
+        flat_args = [] of DBValue
+
+        args.each do |a|
           case a
+          when Array(String)
+            # Expand the next ? to (?, ?, ...) for IN clause
+            placeholders = a.map { "?" }.join(", ")
+            expanded_clause = expanded_clause.sub("?", "(#{placeholders})")
+            a.each { |v| flat_args << v.as(DBValue) }
+          when Array(UUID)
+            # Expand the next ? to (?, ?, ...) for IN clause, convert UUIDs to strings
+            placeholders = a.map { "?" }.join(", ")
+            expanded_clause = expanded_clause.sub("?", "(#{placeholders})")
+            a.each { |v| flat_args << v.to_s.as(DBValue) }
           when UUID
-            a.to_s.as(DBValue)
+            flat_args << a.to_s.as(DBValue)
           else
-            a.as(DBValue)
+            flat_args << a.as(DBValue)
           end
         end
-        with_wheres(@wheres + [WhereClause.new(clause, converted)])
+
+        with_wheres(@wheres + [WhereClause.new(expanded_clause, flat_args)])
       end
 
       # Add a WHERE clause with a block (returns new Builder)
