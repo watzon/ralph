@@ -197,8 +197,10 @@ module Ralph
     # ```
     # validates_uniqueness_of :email
     # validates_uniqueness_of :username, message: "is already taken"
+    # validates_uniqueness_of :order_number, scope: :tenant_id    # unique per tenant
+    # validates_uniqueness_of :slug, scope: [:category_id, :year] # compound scope
     # ```
-    macro validates_uniqueness_of(attribute, message = nil)
+    macro validates_uniqueness_of(attribute, message = nil, scope = nil)
       def _ralph_validate_uniqueness_{{attribute.id}} : Nil
         %value = @{{attribute.id}}
 
@@ -208,6 +210,17 @@ module Ralph
         # Build query to check for existing records
         %query = Ralph::Query::Builder.new(self.class.table_name)
           .where("#{{{attribute.id.stringify}}} = ?", %value)
+
+        # Add scope conditions if specified
+        {% if scope %}
+          {% if scope.is_a?(ArrayLiteral) %}
+            {% for scope_attr in scope %}
+              %query = %query.where("#{{{scope_attr.id.stringify}}} = ?", @{{scope_attr.id}})
+            {% end %}
+          {% else %}
+            %query = %query.where("#{{{scope.id.stringify}}} = ?", @{{scope.id}})
+          {% end %}
+        {% end %}
 
         # Exclude current record if it's persisted
         if persisted?
