@@ -6,6 +6,9 @@ module Ralph
   # - Nested transaction support (savepoints)
   # - Transaction callbacks (after_commit, after_rollback)
   #
+  # All transaction state is stored per-Fiber to ensure thread/fiber safety
+  # in concurrent environments (e.g., web servers handling multiple requests).
+  #
   # Example:
   # ```
   # User.transaction do
@@ -15,49 +18,59 @@ module Ralph
   # end
   # ```
   module Transactions
-    # Track current transaction depth for nested transactions
-    @@transaction_depth : Int32 = 0
+    # Fiber-local transaction state container
+    class FiberState
+      property transaction_depth : Int32 = 0
+      property transaction_committed : Bool = true
+      property after_commit_callbacks : Array(Proc(Nil)) = [] of Proc(Nil)
+      property after_rollback_callbacks : Array(Proc(Nil)) = [] of Proc(Nil)
+    end
 
-    # Track whether current transaction is committed or rolled back
-    @@transaction_committed : Bool = true
+    # Store fiber states keyed by fiber object_id
+    @@fiber_states = {} of UInt64 => FiberState
 
-    # Track after_commit callbacks
-    @@after_commit_callbacks : Array(Proc(Nil)) = [] of Proc(Nil)
+    # Get the transaction state for the current fiber
+    def self.fiber_state : FiberState
+      fiber_id = Fiber.current.object_id
+      @@fiber_states[fiber_id] ||= FiberState.new
+    end
 
-    # Track after_rollback callbacks
-    @@after_rollback_callbacks : Array(Proc(Nil)) = [] of Proc(Nil)
+    # Clean up state for a fiber (call when fiber ends if needed)
+    def self.cleanup_fiber_state(fiber_id : UInt64? = nil)
+      id = fiber_id || Fiber.current.object_id
+      @@fiber_states.delete(id)
+    end
 
     # Get the current transaction depth
     def self.transaction_depth : Int32
-      @@transaction_depth
+      fiber_state.transaction_depth
     end
 
     # Increment transaction depth
     def self.transaction_depth=(value : Int32)
-      @@transaction_depth = value
+      fiber_state.transaction_depth = value
     end
 
     # Check if currently in a transaction
     def self.in_transaction? : Bool
-      @@transaction_depth > 0
+      fiber_state.transaction_depth > 0
     end
 
     # Check if the current transaction is committed (not rolled back)
     def self.transaction_committed? : Bool
-      @@transaction_committed
+      fiber_state.transaction_committed
     end
 
     # Setter for transaction committed state
     def self.transaction_committed=(value : Bool)
-      @@transaction_committed = value
+      fiber_state.transaction_committed = value
     end
 
     # Register an after_commit callback
     def self.after_commit(&block : Proc(Nil))
       if in_transaction?
-        @@after_commit_callbacks << block
+        fiber_state.after_commit_callbacks << block
       else
-        # If not in a transaction, execute immediately
         block.call
       end
     end
@@ -65,31 +78,31 @@ module Ralph
     # Register an after_rollback callback
     def self.after_rollback(&block : Proc(Nil))
       if in_transaction?
-        @@after_rollback_callbacks << block
-      else
-        # If not in a transaction, this will never be called
-        # so we just ignore it
+        fiber_state.after_rollback_callbacks << block
       end
     end
 
     # Run after_commit callbacks
     def self.run_after_commit_callbacks
-      callbacks = @@after_commit_callbacks.dup
-      @@after_commit_callbacks.clear
+      state = fiber_state
+      callbacks = state.after_commit_callbacks.dup
+      state.after_commit_callbacks.clear
       callbacks.each(&.call)
     end
 
     # Run after_rollback callbacks
     def self.run_after_rollback_callbacks
-      callbacks = @@after_rollback_callbacks.dup
-      @@after_rollback_callbacks.clear
+      state = fiber_state
+      callbacks = state.after_rollback_callbacks.dup
+      state.after_rollback_callbacks.clear
       callbacks.each(&.call)
     end
 
     # Clear all transaction callbacks
     def self.clear_transaction_callbacks
-      @@after_commit_callbacks.clear
-      @@after_rollback_callbacks.clear
+      state = fiber_state
+      state.after_commit_callbacks.clear
+      state.after_rollback_callbacks.clear
     end
   end
 
