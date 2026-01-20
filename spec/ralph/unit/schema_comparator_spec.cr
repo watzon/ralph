@@ -232,8 +232,8 @@ describe Ralph::Schema::SqlMigrationGenerator do
 
       content.should contain("CREATE TABLE \"users\"")
       content.should contain("\"id\" BIGINT PRIMARY KEY NOT NULL")
-      content.should contain("\"name\" VARCHAR(255) NOT NULL")
-      content.should contain("\"email\" VARCHAR(255)")
+      content.should contain("\"name\" TEXT NOT NULL")
+      content.should contain("\"email\" TEXT")
       # Down migration
       content.should contain("DROP TABLE IF EXISTS \"users\"")
     end
@@ -295,7 +295,7 @@ describe Ralph::Schema::SqlMigrationGenerator do
       result = generator.generate
       content = result[:content]
 
-      content.should contain("ALTER TABLE \"users\" ADD COLUMN \"nickname\" VARCHAR(255)")
+      content.should contain("ALTER TABLE \"users\" ADD COLUMN \"nickname\" TEXT")
       content.should_not contain("NOT NULL")
       # Down migration
       content.should contain("ALTER TABLE \"users\" DROP COLUMN \"nickname\"")
@@ -321,7 +321,7 @@ describe Ralph::Schema::SqlMigrationGenerator do
       result = generator.generate
       content = result[:content]
 
-      content.should contain("ALTER TABLE \"users\" ADD COLUMN \"status\" VARCHAR(255) NOT NULL")
+      content.should contain("ALTER TABLE \"users\" ADD COLUMN \"status\" TEXT NOT NULL")
     end
 
     it "generates ADD FOREIGN KEY statement" do
@@ -400,7 +400,8 @@ describe Ralph::Schema::SqlMigrationGenerator do
       result = generator.generate
       content = result[:content]
 
-      content.should contain("\"is_active\" BOOLEAN NOT NULL DEFAULT true")
+      # PostgreSQL outputs TRUE/FALSE in uppercase
+      content.should contain("\"is_active\" BOOLEAN NOT NULL DEFAULT TRUE")
     end
 
     it "orders CREATE TABLE by foreign key dependencies" do

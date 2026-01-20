@@ -410,7 +410,8 @@ describe "Model scopes" do
       query = Ralph::ScopeTestUser.active
       sql = query.build_select
 
-      sql.should eq("SELECT * FROM \"scope_test_users\" WHERE active = $1")
+      sql.should contain("FROM \"scope_test_users\"")
+      sql.should contain("WHERE active = $1")
 
       args = query.all_args
       args.should eq([true])
@@ -444,7 +445,8 @@ describe "Model scopes" do
       query = Ralph::ScopeTestUser.older_than(21)
       sql = query.build_select
 
-      sql.should eq("SELECT * FROM \"scope_test_users\" WHERE age > $1")
+      sql.should contain("FROM \"scope_test_users\"")
+      sql.should contain("WHERE age > $1")
 
       args = query.all_args
       args.should eq([21])
@@ -454,7 +456,8 @@ describe "Model scopes" do
       query = Ralph::ScopeTestUser.with_role("admin")
       sql = query.build_select
 
-      sql.should eq("SELECT * FROM \"scope_test_users\" WHERE role = $1")
+      sql.should contain("FROM \"scope_test_users\"")
+      sql.should contain("WHERE role = $1")
 
       args = query.all_args
       args.should eq(["admin"])

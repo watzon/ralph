@@ -104,11 +104,20 @@ module RalphTestHelper
       t.integer("views", default: 0)
       t.boolean("published", default: false)
     end
+
+    # UUID primary key table for bulk operations testing
+    TestSchema.create_table("uuid_items") do |t|
+      t.uuid_primary_key("id")
+      t.string("name")
+      t.string("code")
+      t.index("code", unique: true)
+    end
   end
 
   def self.cleanup_test_database
     case @@adapter
     when "postgres"
+      TestSchema.drop_table("uuid_items")
       TestSchema.drop_table("posts")
       TestSchema.drop_table("users")
     when "sqlite"
@@ -119,6 +128,7 @@ module RalphTestHelper
   end
 
   def self.clear_tables
+    TestSchema.truncate_table("uuid_items")
     TestSchema.truncate_table("posts")
     TestSchema.truncate_table("users")
   end

@@ -157,13 +157,17 @@ module Ralph
         end
       end
 
-      # Read primary key value from result set based on model's primary key type
+      # Read primary key value from result set based on model's primary key type.
+      # Returns String for UUID primary keys, Int64 for integer primary keys.
+      #
+      # Note: Uses untyped read for UUID because PostgreSQL returns native UUID
+      # while SQLite returns String. The untyped read handles both cases and we
+      # convert to String for the return type.
       private def read_primary_key_value(rs : ::DB::ResultSet) : BulkOperationId
         case self.primary_key_type
         when "UUID"
-          # PostgreSQL returns UUID type directly, SQLite returns String
-          raw = rs.read(UUID | String)
-          raw.is_a?(UUID) ? raw.to_s : raw
+          # Untyped read handles both PostgreSQL (UUID) and SQLite (String)
+          rs.read.to_s
         else
           rs.read(Int64)
         end

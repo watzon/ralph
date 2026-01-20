@@ -14,6 +14,15 @@ module Ralph
     column created_at : Time | Nil
   end
 
+  # Test model with UUID primary key
+  class BulkTestUuidItem < Model
+    table "uuid_items"
+
+    column id : UUID, primary: true
+    column name : String
+    column code : String
+  end
+
   # Integration tests for Bulk Operations
   describe BulkOperations do
     before_all do
@@ -282,6 +291,67 @@ module Ralph
 
         result.count.should eq(100)
         BulkTestUser.count.should eq(100)
+      end
+    end
+
+    describe "UUID primary keys" do
+      it "inserts records with UUID primary keys" do
+        id1 = UUID.random
+        id2 = UUID.random
+
+        result = BulkTestUuidItem.insert_all([
+          {id: id1.to_s, name: "Item 1", code: "CODE1"},
+          {id: id2.to_s, name: "Item 2", code: "CODE2"},
+        ])
+
+        result.count.should eq(2)
+        BulkTestUuidItem.count.should eq(2)
+
+        item1 = BulkTestUuidItem.find_by("code", "CODE1")
+        item1.should_not be_nil
+        item1.not_nil!.id.should eq(id1)
+      end
+
+      it "returns UUID IDs on PostgreSQL when returning is true" do
+        id1 = UUID.random
+        id2 = UUID.random
+
+        result = BulkTestUuidItem.insert_all([
+          {id: id1.to_s, name: "Item 1", code: "CODE1"},
+          {id: id2.to_s, name: "Item 2", code: "CODE2"},
+        ], returning: true)
+
+        result.count.should eq(2)
+
+        if RalphTestHelper.postgres?
+          result.ids.size.should eq(2)
+          # IDs are returned as strings for UUID columns
+          result.ids.all? { |id|
+            id.is_a?(String) && !id.as(String).empty?
+          }.should be_true
+        end
+      end
+
+      it "upserts records with UUID primary keys" do
+        id1 = UUID.random
+        BulkTestUuidItem.insert_all([
+          {id: id1.to_s, name: "Original", code: "CODE1"},
+        ])
+
+        # Upsert with same code should update
+        id2 = UUID.random
+        result = BulkTestUuidItem.upsert_all([
+          {id: id2.to_s, name: "Updated", code: "CODE1"},
+          {id: UUID.random.to_s, name: "New Item", code: "CODE2"},
+        ], on_conflict: :code, update: [:name])
+
+        BulkTestUuidItem.count.should eq(2)
+
+        item1 = BulkTestUuidItem.find_by("code", "CODE1")
+        item1.should_not be_nil
+        item1.not_nil!.name.should eq("Updated")
+        # Original ID should be preserved (upsert updated, not inserted)
+        item1.not_nil!.id.should eq(id1)
       end
     end
   end
