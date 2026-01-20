@@ -161,7 +161,9 @@ module Ralph
       private def read_primary_key_value(rs : ::DB::ResultSet) : BulkOperationId
         case self.primary_key_type
         when "UUID"
-          rs.read(String)
+          # PostgreSQL returns UUID type directly, SQLite returns String
+          raw = rs.read(UUID | String)
+          raw.is_a?(UUID) ? raw.to_s : raw
         else
           rs.read(Int64)
         end
