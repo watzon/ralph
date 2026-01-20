@@ -1,4 +1,8 @@
 module Ralph
+  # Union type for primary key values returned from bulk operations
+  # Supports both integer and UUID primary keys
+  alias BulkOperationId = Int64 | String
+
   # Result of a bulk insert operation
   #
   # Contains information about the inserted records, including IDs if available.
@@ -8,9 +12,10 @@ module Ralph
 
     # IDs of inserted records (only available on PostgreSQL with RETURNING clause)
     # For SQLite, this will be empty as SQLite doesn't support RETURNING for multi-row inserts
-    getter ids : Array(Int64)
+    # Returns String for UUID columns, Int64 for integer columns
+    getter ids : Array(BulkOperationId)
 
-    def initialize(@count : Int32, @ids : Array(Int64) = [] of Int64)
+    def initialize(@count : Int32, @ids : Array(BulkOperationId) = [] of BulkOperationId)
     end
   end
 
@@ -20,9 +25,10 @@ module Ralph
     getter count : Int32
 
     # IDs of affected records (only available on PostgreSQL)
-    getter ids : Array(Int64)
+    # Returns String for UUID columns, Int64 for integer columns
+    getter ids : Array(BulkOperationId)
 
-    def initialize(@count : Int32, @ids : Array(Int64) = [] of Int64)
+    def initialize(@count : Int32, @ids : Array(BulkOperationId) = [] of BulkOperationId)
     end
   end
 
@@ -132,11 +138,11 @@ module Ralph
         case dialect
         when :postgres
           if returning
-            sql += " RETURNING \"id\""
-            ids = [] of Int64
+            sql += " RETURNING \"#{self.primary_key}\""
+            ids = [] of BulkOperationId
             rs = Ralph.database.query_all(sql, args: args)
             rs.each do
-              ids << rs.read(Int64)
+              ids << read_primary_key_value(rs)
             end
             rs.close
             BulkInsertResult.new(ids.size, ids)
@@ -148,6 +154,16 @@ module Ralph
           # SQLite doesn't support RETURNING for multi-row inserts easily
           Ralph.database.execute(sql, args: args)
           BulkInsertResult.new(records.size)
+        end
+      end
+
+      # Read primary key value from result set based on model's primary key type
+      private def read_primary_key_value(rs : ::DB::ResultSet) : BulkOperationId
+        case self.primary_key_type
+        when "UUID"
+          rs.read(String)
+        else
+          rs.read(Int64)
         end
       end
 
@@ -244,12 +260,12 @@ module Ralph
             update_clauses = cols_to_update.map { |c| "\"#{c}\" = EXCLUDED.\"#{c}\"" }.join(", ")
             sql += " ON CONFLICT (#{conflict_col_list}) DO UPDATE SET #{update_clauses}"
           end
-          sql += " RETURNING \"id\""
+          sql += " RETURNING \"#{self.primary_key}\""
 
-          ids = [] of Int64
+          ids = [] of BulkOperationId
           rs = Ralph.database.query_all(sql, args: args)
           rs.each do
-            ids << rs.read(Int64)
+            ids << read_primary_key_value(rs)
           end
           rs.close
           BulkUpsertResult.new(ids.size, ids)

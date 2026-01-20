@@ -77,7 +77,14 @@ module Ralph
 
         if RalphTestHelper.postgres?
           result.ids.size.should eq(2)
-          result.ids.all? { |id| id > 0 }.should be_true
+          # IDs can be Int64 or String (UUID), just verify they're present
+          result.ids.all? { |id|
+            case id
+            when Int64  then id > 0
+            when String then !id.empty?
+            else             false
+            end
+          }.should be_true
         end
       end
     end
