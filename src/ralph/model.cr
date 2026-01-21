@@ -756,8 +756,8 @@ module Ralph
         {% query_arg = block.args[0] %}
         {% query_var_name = query_arg.is_a?(TypeDeclaration) ? query_arg.var : query_arg %}
         def self.{{name.id}} : Ralph::Query::Builder
-          # Pre-select columns in model order to ensure consistent reading
-          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name).select(column_names_ordered)
+          # Use base_query to respect soft deletes and other model-level query modifications
+          {{query_var_name.id}} = base_query
           {{block.body}}
         end
       {% else %}
@@ -775,8 +775,8 @@ module Ralph
             {% end %}
           {% end %}
         ) : Ralph::Query::Builder
-          # Pre-select columns in model order to ensure consistent reading
-          {{query_var_name.id}} = Ralph::Query::Builder.new(self.table_name).select(column_names_ordered)
+          # Use base_query to respect soft deletes and other model-level query modifications
+          {{query_var_name.id}} = base_query
           # Assign scope args to their expected names
           {% for arg, idx in user_args %}
             {% if arg.is_a?(TypeDeclaration) %}
@@ -804,7 +804,7 @@ module Ralph
     # User.scoped { |q| q.where("age > ?", 18) }.limit(10)
     # ```
     def self.scoped(&block : Ralph::Query::Builder -> Ralph::Query::Builder) : Ralph::Query::Builder
-      query = Ralph::Query::Builder.new(self.table_name)
+      query = base_query
       block.call(query)
     end
 
